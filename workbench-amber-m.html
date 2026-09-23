@@ -1382,7 +1382,7 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
 buildDrawer();
 render();
 sync.badge(sync.on ? "自动同步中" : "未启用同步");
-sync.startAuto(); if(sync.on) sync.pull(true);
+sync.startAuto(); if(sync.on) sync.pull(true).then(()=>{ if((sync.cfg().rev||0)===0 && data && Object.keys(data).length) sync.push(); });
 
   /* ============================================================
      VISUAL ENHANCEMENTS JS
