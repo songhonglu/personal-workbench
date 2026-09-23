@@ -1052,11 +1052,6 @@ function confirmCalUncheck(item, ds){
     <div class="sub">取消 ${ds} 的打卡可能会中断连续天数，确定吗？</div>
     <div class="modal-actions"><button class="btn ghost" id="cu-cancel">保留</button><button class="btn danger" id="cu-ok">取消打卡</button></div></div>`;
   document.body.appendChild(overlay);
-  // image upload handler
-  (function(){var ff=overlay.querySelector("#f-image-file"),fi=overlay.querySelector("#f-image"),fp=overlay.querySelector("#f-image-prev");
-  if(d.image&&fi){fi.value=d.image;fp.src=d.image;fp.style.display="block";}if(ff)ff.onchange=function(){var file=ff.files[0];if(!file)return;var r=new FileReader();r.onload=function(){fi.value=r.result;fp.src=r.result;fp.style.display="block";};r.readAsDataURL(file);};
-  if(fi)fi.oninput=function(){var v=fi.value.trim();if(v){fp.src=v;fp.style.display="block";}else{fp.style.display="none";}};
-  })();
   const close=()=>overlay.remove();
   overlay.onclick=e=>{ if(e.target===overlay) close(); };
   overlay.querySelector("#cu-cancel").onclick=close;
@@ -1314,6 +1309,11 @@ function openEditor(key, item){
     <div class="modal-actions">${editing?'<button class="link-danger" id="m-del">删除</button>':''}
       <button class="btn ghost" id="m-cancel">取消</button><button class="btn" id="m-save">保存</button></div></div>`;
   document.body.appendChild(overlay);
+  // image upload handler
+  (function(){var ff=overlay.querySelector("#f-image-file"),fi=overlay.querySelector("#f-image"),fp=overlay.querySelector("#f-image-prev");
+  if(d.image&&fi){fi.value=d.image;fp.src=d.image;fp.style.display="block";}if(ff)ff.onchange=function(){var file=ff.files[0];if(!file)return;var r=new FileReader();r.onload=function(){fi.value=r.result;fp.src=r.result;fp.style.display="block";};r.readAsDataURL(file);};
+  if(fi)fi.oninput=function(){var v=fi.value.trim();if(v){fp.src=v;fp.style.display="block";}else{fp.style.display="none";}};
+  })();
   const close=()=>overlay.remove();
   overlay.onclick=e=>{ if(e.target===overlay) close(); };
   overlay.querySelector("#m-cancel").onclick=close;
