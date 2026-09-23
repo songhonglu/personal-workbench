@@ -470,7 +470,7 @@
 
   /* wb-v1.1-patched */
   /* ===== v1.1: 全局搜索 + 天气 + 归档 ===== */
-  .wb-topbar{display:flex;align-items:center;gap:12px;padding:8px 20px;background:var(--surface-glass);backdrop-filter:blur(10px);border-bottom:1px solid var(--border);position:static;min-width:0}
+  .wb-topbar{display:flex;align-items:center;gap:12px;padding:8px 20px;background:var(--surface-glass);backdrop-filter:blur(10px);border-bottom:1px solid var(--border);position:relative;z-index:10;min-width:0}
   .wb-search{flex:1;max-width:420px;position:relative}
   .wb-search input{width:100%;padding:7px 12px 7px 34px;border:1px solid var(--border-input);border-radius:var(--radius-control);background:var(--surface-card);color:var(--text);font-size:13px;outline:none;transition:border-color .2s}
   .wb-search input:focus{border-color:var(--accent)}
