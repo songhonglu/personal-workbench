@@ -1497,8 +1497,8 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
     }
 
     // --- 天气 ---
-    function wCfg(){try{const r=storage.getItem(WK);return r?JSON.parse(r):null}catch(e){return null}}
-    function wSet(c){storage.setItem(WK,JSON.stringify(c))}
+    function wCfg(){return data.__weather||null}
+    function wSet(c){data.__weather=c;store.save()}
     async function wFetch(lat,lon){const r=await fetch('https://api.open-meteo.com/v1/forecast?latitude='+lat+'&longitude='+lon+'&current=temperature_2m,weather_code&timezone=auto');const j=await r.json();return{temp:Math.round(j.current.temperature_2m),code:j.current.weather_code}}
     async function wCity(lat,lon){try{const r=await fetch('https://api.bigdatacloud.net/data/reverse-geocode-client?latitude='+lat+'&longitude='+lon+'&localityLanguage=zh');const j=await r.json();return j.city||j.locality||j.principalSubdivision||'未知'}catch(e){return'未知'}}
     async function wSearch(name){const r=await fetch('https://geocoding-api.open-meteo.com/v1/search?name='+encodeURIComponent(name)+'&count=5&language=zh');const j=await r.json();return j.results||[]}
@@ -1582,7 +1582,7 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
 
     // --- 深色模式 ---
     function initTheme(){
-      const saved = storage.getItem(TK);
+      const saved = data.__theme || "light";
       if (saved === 'dark') document.documentElement.setAttribute('data-theme','dark');
       const btn = document.getElementById('wb-theme');
       if (!btn) return;
@@ -1590,8 +1590,8 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
       update();
       btn.onclick = () => {
         const dark = document.documentElement.getAttribute('data-theme')==='dark';
-        if (dark) { document.documentElement.removeAttribute('data-theme'); storage.setItem(TK,'light'); }
-        else { document.documentElement.setAttribute('data-theme','dark'); storage.setItem(TK,'dark'); }
+        if (dark) { document.documentElement.removeAttribute('data-theme'); data.__theme='light'; store.save(); }
+        else { document.documentElement.setAttribute('data-theme','dark'); data.__theme='dark'; store.save(); }
         update();
       };
     }
@@ -1786,6 +1786,25 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
     initKeys();
     initMonthlyView();
     initRepeatBadge();
+    // 同步后自动应用主题+天气
+    const _origSyncPull = sync.pull.bind(sync);
+    sync.pull = async function(silent) {
+      const oldTheme = data.__theme;
+      const oldWeather = data.__weather;
+      await _origSyncPull(silent);
+      if (data.__theme !== oldTheme) {
+        if (data.__theme === "dark") document.documentElement.setAttribute("data-theme","dark");
+        else document.documentElement.removeAttribute("data-theme");
+        const btn = document.getElementById("wb-theme");
+        if (btn) btn.textContent = data.__theme === "dark" ? "☀️" : "🌙";
+      }
+      if (data.__weather !== oldWeather && data.__weather) {
+        const ico=document.getElementById("wb-wi"),t=document.getElementById("wb-wt"),ci=document.getElementById("wb-wc");
+        if(ico){const WMO2={0:"☀️",1:"🌤️",2:"⛅",3:"☁️",45:"🌫️",48:"🌫️",51:"🌦️",53:"🌦️",55:"🌧️",56:"🌧️",57:"🌧️",61:"🌧️",63:"🌧️",65:"🌧️",66:"🌧️",67:"🌧️",71:"🌨️",73:"🌨️",75:"❄️",77:"❄️",80:"🌦️",81:"🌧️",82:"🌧️",85:"🌨️",86:"❄️",95:"⛈️",96:"⛈️",99:"⛈️"};
+        ico.textContent=WMO2[data.__weather.code]||"🌡️";t.textContent=data.__weather.temp!=null?data.__weather.temp+"°":"--";ci.textContent=data.__weather.city||"点击设置";}
+      }
+    };
+  
   })();
 
 buildDrawer();

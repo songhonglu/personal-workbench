@@ -1,0 +1,26 @@
+[
+  {
+    "id": "05196d681a654acb8850c09889a20e42",
+    "userID": "amberk921",
+    "domainID": "amberk921",
+    "type": "Language preference",
+    "content": "prefers using native Chinese language for interaction",
+    "remark": "new",
+    "namespace": "DevMate",
+    "createTime": "2026-09-23T12:20:50.280Z",
+    "updateTime": "2026-09-23T12:20:50.280Z",
+    "isDeleted": false
+  },
+  {
+    "id": "c188ba9b386b4a39ab2f3c862ff40d55",
+    "userID": "amberk921",
+    "domainID": "amberk921",
+    "type": "Explanation preference",
+    "content": "user asks 'why' questions about design decisions, indicating preference for explanations of reasoning and principles",
+    "remark": "new",
+    "namespace": "DevMate",
+    "createTime": "2026-09-23T16:19:04.040Z",
+    "updateTime": "2026-09-23T16:19:04.040Z",
+    "isDeleted": false
+  }
+]

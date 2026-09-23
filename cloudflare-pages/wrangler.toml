@@ -1,0 +1,7 @@
+name = "workbench-sync"
+pages_build_output_dir = "."
+compatibility_date = "2025-01-01"
+
+[[kv_namespaces]]
+binding = "KV"
+id = "645b805df0f84a1db92b845041f64535"
