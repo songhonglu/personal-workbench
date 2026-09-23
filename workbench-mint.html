@@ -902,7 +902,7 @@ const store = {
     d.__trend = [7, 6, 8, 5, 7, 8, 9];
     return d;
   },
-  saveLocal(){ storage.setItem(CONFIG.storageKey, JSON.stringify(data)); },
+  saveLocal(){ try{ storage.setItem(CONFIG.storageKey, JSON.stringify(data)); }catch(e){ toast("存储空间已满，请导出备份后清理"); console.error("[store] saveLocal:", e); } },
   save(){ this.saveLocal(); sync.schedulePush(); },
 };
 
@@ -1565,7 +1565,7 @@ function openEditor(key,item){
   document.body.appendChild(overlay);
   // image upload handler
   (function(){var ff=overlay.querySelector("#f-image-file"),fi=overlay.querySelector("#f-image"),fp=overlay.querySelector("#f-image-prev");
-  if(d.image&&fi){fi.value=d.image;fp.src=d.image;fp.style.display="block";}if(ff)ff.onchange=function(){var file=ff.files[0];if(!file)return;var r=new FileReader();r.onload=function(){fi.value=r.result;fp.src=r.result;fp.style.display="block";};r.readAsDataURL(file);};
+  if(d.image&&fi){fi.value=d.image;fp.src=d.image;fp.style.display="block";}if(ff)ff.onchange=function(){var file=ff.files[0];if(!file)return;var r=new FileReader();r.onload=function(){var img=new Image();img.onload=function(){var c=document.createElement("canvas");var mw=800,mh=800;var w=img.width,h=img.height;if(w>mw){h=h*mw/w;w=mw;}if(h>mh){w=w*mh/h;h=mh;}c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);var du=c.toDataURL("image/jpeg",0.7);fi.value=du;fp.src=du;fp.style.display="block";};img.src=r.result;};r.readAsDataURL(file);};
   if(fi)fi.oninput=function(){var v=fi.value.trim();if(v){fp.src=v;fp.style.display="block";}else{fp.style.display="none";}};
   })();
   const close=()=>overlay.remove();
