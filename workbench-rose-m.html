@@ -550,9 +550,9 @@
         <input id="wb-ws" placeholder="搜索城市…" autocomplete="off"/>
         <div class="wb-w-res" id="wb-wr"></div>
         <div class="wb-w-hint">输入城市名搜索</div>
-    <button class="wb-theme-btn" id="wb-theme" title="切换深色/浅色">🌙</button>
       </div>
     </div>
+    <button class="wb-theme-btn" id="wb-theme" title="切换深色/浅色">🌙</button>
   </div>
   <div id="screen"></div>
 </div>
@@ -1516,7 +1516,7 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
         const{latitude,longitude}=pos.coords;const city=await wCity(latitude,longitude);const w=await wFetch(latitude,longitude);
         const c={city,lat:latitude,lon:longitude,...w};wSet(c);wUpdate(c);
       },()=>wUpdate({city:'点击设置',temp:null,code:null}),{timeout:5000});
-      w.onclick=e=>{if(p.contains(e.target))return;e.stopPropagation();p.classList.toggle('show')};
+      p.addEventListener('click',e=>e.stopPropagation());w.onclick=e=>{e.stopPropagation();p.classList.toggle('show')};
       let sc=false;
       si.addEventListener('compositionstart',()=>sc=true);
       si.addEventListener('compositionend',()=>{sc=false;doWS()});
