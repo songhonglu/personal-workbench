@@ -1565,7 +1565,7 @@ function openEditor(key,item){
   document.body.appendChild(overlay);
   // image upload handler
   (function(){var ff=overlay.querySelector("#f-image-file"),fi=overlay.querySelector("#f-image"),fp=overlay.querySelector("#f-image-prev");
-  if(ff)ff.onchange=function(){var file=ff.files[0];if(!file)return;var r=new FileReader();r.onload=function(){fi.value=r.result;fp.src=r.result;fp.style.display="block";};r.readAsDataURL(file);};
+  if(d.image&&fi){fi.value=d.image;fp.src=d.image;fp.style.display="block";}if(ff)ff.onchange=function(){var file=ff.files[0];if(!file)return;var r=new FileReader();r.onload=function(){fi.value=r.result;fp.src=r.result;fp.style.display="block";};r.readAsDataURL(file);};
   if(fi)fi.oninput=function(){var v=fi.value.trim();if(v){fp.src=v;fp.style.display="block";}else{fp.style.display="none";}};
   })();
   const close=()=>overlay.remove();
