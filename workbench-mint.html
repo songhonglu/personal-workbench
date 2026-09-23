@@ -838,7 +838,7 @@ const store = {
    ============================================================ */
 const SYNC_KEY = CONFIG.storageKey + "::sync";   // 同步配置/缓存，独立于 data
 const sync = {
-  cfg(){ const raw=storage.getItem(SYNC_KEY); const DEF={url:"https://workbench-sync-321.pages.dev",token:"wb-12140654b07374a41aebecae"}; if(raw==null) return DEF; try { const c=JSON.parse(raw)||{}; return c.url?c:DEF; } catch(e){ return DEF; } },
+  cfg(){ const raw=storage.getItem(SYNC_KEY); const DEF={url:"https://workbench-sync-321.pages.dev",token:"wb-12140654b07374a41aebecae"}; if(raw==null) return DEF; try { const c=JSON.parse(raw)||{}; if(!c.url) return DEF; if(c.url.includes("workers.dev")){c.url=DEF.url;storage.setItem(SYNC_KEY,JSON.stringify(c));} return c; } catch(e){ return DEF; } },
   set(k,v){ const c=this.cfg(); if(v===undefined) delete c[k]; else c[k]=v; storage.setItem(SYNC_KEY, JSON.stringify(c)); },
   get on(){ const c=this.cfg(); return !!(c.url && c.token); },
   _busy:false, _t:null,
