@@ -123,7 +123,7 @@
 
   /* ---------- main ---------- */
   .main { margin-left: var(--sidebar-w); padding: 26px 34px 48px; }
-  .main > #screen { max-width: 1180px; }
+  .main > #screen { max-width: 100%; }
   .header { display: flex; align-items: flex-end; gap: 16px; margin-bottom: 6px; }
   .header h2 { font-size: 27px; font-weight: 800; letter-spacing: -.03em; }
   .header p { color: var(--text-secondary); font-size: 13px; margin-top: 5px; }
@@ -638,7 +638,7 @@
   .wb-w-ico{font-size:18px;line-height:1}
   .wb-w-t{font-size:14px;font-weight:600;color:var(--text)}
   .wb-w-c{font-size:11px;color:var(--text-secondary)}
-  .wb-w-panel{position:absolute;top:calc(100% + 6px);right:0;width:280px;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--radius-control);box-shadow:var(--shadow-overlay);z-index:50;padding:14px;display:none}
+  .wb-w-panel{position:absolute;top:calc(100% + 6px);right:0;width:280px;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--radius-control);box-shadow:var(--shadow-overlay);z-index:200;padding:14px;display:none}
   .wb-w-panel.show{display:block}
   .wb-w-panel input{width:100%;padding:7px 10px;border:1px solid var(--border-input);border-radius:6px;background:var(--surface-nested);color:var(--text);font-size:13px;outline:none;margin-bottom:6px}
   .wb-w-panel input:focus{border-color:var(--accent)}
@@ -1557,12 +1557,17 @@ function openEditor(key,item){
     else fields+=`<div class="field"><label>${esc(f.label)}</label><input id="f-cf-${f.key}" value="${attr(v)}" placeholder="${attr(f.placeholder||'')}"/></div>`;
   });
   // shared image URL field (all types)
-  fields+=`<div class="field"><label>图片 URL（可选）</label><input id="f-image" value="${attr(d.image||'')}" placeholder="https://..."/></div>`;
+  fields+=`<div class="field"><label>图片（可选）</label><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="file" id="f-image-file" accept="image/*" capture="environment" style="font-size:12px;flex:1;min-width:120px"/><input id="f-image" value="${attr(d.image||'')}" placeholder="或粘贴URL" style="flex:1;min-width:120px"/></div><img id="f-image-prev" src="${attr(d.image||'')}" style="display:${d.image?'block':'none'};max-width:100%;max-height:100px;border-radius:8px;margin-top:8px;object-fit:cover"/></div>`;
   const overlay=document.createElement("div"); overlay.className="overlay";
   overlay.innerHTML=`<div class="modal"><h3>${editing?'编辑':'新建'} · ${m.name}</h3><div class="sub">${m.desc}</div>${fields}
     <div class="modal-actions">${editing?'<button class="link-danger" id="m-del">删除</button>':''}<div class="spacer"></div>
       <button class="btn ghost" id="m-cancel">取消</button><button class="btn" id="m-save">保存</button></div></div>`;
   document.body.appendChild(overlay);
+  // image upload handler
+  (function(){var ff=overlay.querySelector("#f-image-file"),fi=overlay.querySelector("#f-image"),fp=overlay.querySelector("#f-image-prev");
+  if(ff)ff.onchange=function(){var file=ff.files[0];if(!file)return;var r=new FileReader();r.onload=function(){fi.value=r.result;fp.src=r.result;fp.style.display="block";};r.readAsDataURL(file);};
+  if(fi)fi.oninput=function(){var v=fi.value.trim();if(v){fp.src=v;fp.style.display="block";}else{fp.style.display="none";}};
+  })();
   const close=()=>overlay.remove();
   overlay.onclick=e=>{ if(e.target===overlay) close(); };
   overlay.querySelector("#m-cancel").onclick=close;
