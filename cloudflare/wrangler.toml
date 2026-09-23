@@ -1,0 +1,9 @@
+name = "workbench-sync"
+main = "worker.js"
+compatibility_date = "2025-01-01"
+
+# KV 绑定：部署前先创建命名空间并把 id 填进来
+# wrangler kv namespace create WORKBENCH_DATA
+[[kv_namespaces]]
+binding = "KV"
+id = "645b805df0f84a1db92b845041f64535"
