@@ -845,6 +845,12 @@ const sync = {
   _base(){ return (this.cfg().url||"").replace(/\/+$/,""); },
   _url(p){ return this._base() + p + "?token=" + encodeURIComponent(this.cfg().token||""); },
   schedulePush(){ if(!this.on) return; clearTimeout(this._t); this._t=setTimeout(()=>this.push(), 1000); },
+   // 全自动同步：每 5 秒静默拉取；后台标签页与编辑弹窗打开时暂停；切回页面立即拉取
+   startAuto(){
+     if(this._auto) return;
+     this._auto=setInterval(()=>{ if(!this.on||this._busy||document.hidden||document.querySelector(".overlay")) return; this.pull(true); }, 5000);
+     document.addEventListener("visibilitychange",()=>{ if(!document.hidden && this.on && !document.querySelector(".overlay")) this.pull(true); });
+   },
   async push(){
     if(!this.on || this._busy) return; this._busy=true; this.badge("同步中…");
     try {
@@ -1596,8 +1602,8 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
 
 buildNav();
 render();
-sync.badge(sync.on ? "已连接" : "未启用同步");
-if(sync.on) sync.pull(true);
+sync.badge(sync.on ? "自动同步中" : "未启用同步");
+sync.startAuto(); if(sync.on) sync.pull(true);
 
   /* ============================================================
      VISUAL ENHANCEMENTS JS
