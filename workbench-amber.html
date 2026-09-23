@@ -1738,7 +1738,7 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
         const{latitude,longitude}=pos.coords;const city=await wCity(latitude,longitude);const w=await wFetch(latitude,longitude);
         const c={city,lat:latitude,lon:longitude,...w};wSet(c);wUpdate(c);
       },()=>wUpdate({city:'点击设置',temp:null,code:null}),{timeout:5000});
-      w.onclick=e=>{e.stopPropagation();p.classList.toggle('show')};
+      w.onclick=e=>{if(p.contains(e.target))return;e.stopPropagation();p.classList.toggle('show')};
       let sc=false;
       si.addEventListener('compositionstart',()=>sc=true);
       si.addEventListener('compositionend',()=>{sc=false;doWS()});
