@@ -2,12 +2,12 @@
 
 计划 · 打卡 · 目标 · 记账 · 笔记 —— 零依赖纯前端个人工作台，浏览器打开即用。
 
-## 在线访问
+## 在线访问（统一入口）
+
+**https://songhonglu.github.io/personal-workbench/** — 自动识别设备：手机进手机版，电脑进电脑版，并记住上次使用的页面与主题。
 
 - 电脑版：`workbench-mint.html`（另有 mocha / rose / amber 三套配色）
 - 手机版：`workbench-mint-m.html`（底栏 Tab + 抽屉导航 + 浮动按钮）
-
-> GitHub Pages 地址：https://songhonglu.github.io/personal-workbench/workbench-mint.html
 
 ## 功能模块
 

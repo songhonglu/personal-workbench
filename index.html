@@ -1,0 +1,72 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>🌿 Song 的工作台</title>
+<style>
+  :root{
+    --bg:#E8F5E9; --ink:#1f2d24; --ink-2:#5b6f63; --accent:#2f7d51;
+    --card:#ffffff; --line:#d9e8dd;
+  }
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%}
+  body{
+    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+    background:var(--bg); color:var(--ink);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .wrap{display:flex;flex-direction:column;align-items:center;gap:18px;padding:32px 20px;text-align:center}
+  .glyph{
+    width:64px;height:64px;border-radius:18px;background:var(--accent);color:#fff;
+    display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:700;
+    box-shadow:0 10px 24px rgba(47,125,81,.28);
+  }
+  h1{font-size:21px;font-weight:700;letter-spacing:.5px}
+  .slogan{font-size:13px;color:var(--ink-2);letter-spacing:2px}
+  .spin{
+    width:18px;height:18px;border-radius:50%;margin-top:6px;
+    border:2.5px solid var(--line);border-top-color:var(--accent);
+    animation:go .8s linear infinite;
+  }
+  .tip{font-size:12px;color:var(--ink-2)}
+  @keyframes go{to{transform:rotate(360deg)}}
+  .links{margin-top:14px;display:flex;flex-wrap:wrap;gap:8px 14px;justify-content:center;max-width:420px}
+  .links a{
+    font-size:12px;color:var(--accent);text-decoration:none;
+    padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);
+  }
+  .links a:hover{filter:brightness(.97)}
+  @media (prefers-reduced-motion:reduce){.spin{animation:none}}
+</style>
+</head>
+<body>
+<div class="wrap">
+  <div class="glyph">S</div>
+  <h1>Song 的工作台</h1>
+  <div class="slogan">计划 · 专注 · 记录 · 成长</div>
+  <div class="spin" aria-hidden="true"></div>
+  <div class="tip">正在进入…</div>
+  <div class="links">
+    <a href="workbench-mint.html">电脑版</a>
+    <a href="workbench-mint-m.html">手机版</a>
+    <a href="workbench-mocha.html">Mocha</a>
+    <a href="workbench-mocha-m.html">Mocha·M</a>
+    <a href="workbench-rose.html">Rose</a>
+    <a href="workbench-rose-m.html">Rose·M</a>
+    <a href="workbench-amber.html">Amber</a>
+    <a href="workbench-amber-m.html">Amber·M</a>
+  </div>
+</div>
+<script>
+(function(){
+  var saved=null; try{ saved=localStorage.getItem("workbench-entry"); }catch(e){}
+  var isMobile = window.matchMedia("(max-width: 760px)").matches
+    || /Android|iPhone|iPod|Mobile|HarmonyOS/i.test(navigator.userAgent)
+    || (/iPad|Macintosh/.test(navigator.userAgent) && "ontouchend" in document && window.matchMedia("(max-width: 1024px)").matches);
+  var file = saved || (isMobile ? "workbench-mint-m.html" : "workbench-mint.html");
+  location.replace(file);
+})();
+</script>
+</body>
+</html>
