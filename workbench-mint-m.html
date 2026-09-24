@@ -526,7 +526,16 @@
   /* 周期任务标记 */
   .wb-repeat-badge{display:inline-flex;align-items:center;gap:2px;font-size:10px;padding:1px 6px;border-radius:4px;background:var(--accent-muted);color:var(--accent-dark);margin-left:4px}
 
+.toast{display:flex;align-items:center;gap:12px}
+  .toast-act{flex:0 0 auto;border:1px solid currentColor;background:transparent;color:inherit;border-radius:8px;padding:3px 12px;font-size:12px;font-weight:700;cursor:pointer}
 </style>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2f7d51">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="工作台">
+<link rel="apple-touch-icon" href="icon-192.png">
 </head>
 <body>
 <div class="app">
@@ -1203,7 +1212,7 @@ function recHTML(m,x){
   const del=`<button class="del js-del" data-id="${x.id}" title="删除">${icon("trash",16)}</button>`;
   const acts=`<div class="acts">${pin}${del}</div>`;
   const chkMark=icon("check",14,2.4);
-  const thumb=x.image?`<img class="thumb" src="${attr(x.image)}" alt="" onerror="this.style.display='none'">`:'';
+  const thumb=x.image?`<img class="thumb" src="${attr(x.imageThumb||x.image)}" alt="" onerror="this.style.display='none'">`:'';
   const customMeta=(m.fields||[]).filter(f=>x[f.key]).map(f=>`<span class="meta-tag">${esc(x[f.key])}</span>`).join("");
   const customBlock=customMeta?`<div class="meta-line">${customMeta}</div>`:'';
   const layout=x.layout||'default';
@@ -1334,7 +1343,7 @@ function openEditor(key, item){
     else fields+=`<div class="field"><label>${esc(f.label)}</label><input id="f-cf-${f.key}" value="${attr(v)}" placeholder="${attr(f.placeholder||'')}"/></div>`;
   });
   // shared image URL field (all types)
-  fields+=`<div class="field"><label>图片（可选）</label><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="file" id="f-image-file" accept="image/*" capture="environment" style="font-size:12px;flex:1;min-width:120px"/><input id="f-image" value="${attr(d.image||'')}" placeholder="或粘贴URL" style="flex:1;min-width:120px"/></div><img id="f-image-prev" src="${attr(d.image||'')}" style="display:${d.image?'block':'none'};max-width:100%;max-height:100px;border-radius:8px;margin-top:8px;object-fit:cover"/></div>`;
+  fields+=`<div class="field"><label>图片（可选）</label><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap"><input type="file" id="f-image-file" accept="image/*" capture="environment" style="font-size:12px;flex:1;min-width:120px"/><input id="f-image" value="${attr(d.image||'')}" placeholder="或粘贴URL" style="flex:1;min-width:120px"/><input type="hidden" id="f-image-thumb" value="${attr(d.imageThumb||'')}"/></div><img id="f-image-prev" src="${attr(d.image||'')}" style="display:${d.image?'block':'none'};max-width:100%;max-height:100px;border-radius:8px;margin-top:8px;object-fit:cover"/></div>`;
 
   const overlay=document.createElement("div"); overlay.className="overlay";
   overlay.innerHTML=`<div class="modal"><div class="grab"></div>
@@ -1344,9 +1353,9 @@ function openEditor(key, item){
       <button class="btn ghost" id="m-cancel">取消</button><button class="btn" id="m-save">保存</button></div></div>`;
   document.body.appendChild(overlay);
   // image upload handler
-  (function(){var ff=overlay.querySelector("#f-image-file"),fi=overlay.querySelector("#f-image"),fp=overlay.querySelector("#f-image-prev");
-  if(d.image&&fi){fi.value=d.image;fp.src=d.image;fp.onerror=()=>{fp.src="";fp.style.display="none";};fp.style.display="block";}if(ff)ff.onchange=function(){var file=ff.files[0];if(!file)return;var r=new FileReader();r.onload=function(){var img=new Image();img.onload=function(){var c=document.createElement("canvas");var mw=800,mh=800;var w=img.width,h=img.height;if(w>mw){h=h*mw/w;w=mw;}if(h>mh){w=w*mh/h;h=mh;}c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);var du=c.toDataURL("image/jpeg",0.7);fi.value=du;fp.src=du;fp.onerror=()=>{fp.src="";fp.style.display="none";};fp.style.display="block";};img.src=r.result;};r.readAsDataURL(file);};
-  if(fi)fi.oninput=function(){var v=fi.value.trim();if(v){fp.src=v;fp.onerror=()=>{fp.src="";fp.style.display="none";};fp.style.display="block";}else{fp.style.display="none";}};
+  (function(){var ff=overlay.querySelector("#f-image-file"),fi=overlay.querySelector("#f-image"),fp=overlay.querySelector("#f-image-prev"),ft=overlay.querySelector("#f-image-thumb");
+  if(d.image&&fi){fi.value=d.image;if(ft)ft.value=d.imageThumb||"";fp.src=d.image;fp.onerror=()=>{fp.src="";fp.style.display="none";};fp.style.display="block";}if(ff)ff.onchange=function(){var file=ff.files[0];if(!file)return;var r=new FileReader();r.onload=function(){var img=new Image();img.onload=function(){var c=document.createElement("canvas");var mw=800,mh=800;var w=img.width,h=img.height;if(w>mw){h=h*mw/w;w=mw;}if(h>mh){w=w*mh/h;h=mh;}c.width=w;c.height=h;c.getContext("2d").drawImage(img,0,0,w,h);var du=c.toDataURL("image/jpeg",0.7);var s2=Math.min(96/w,96/h,1);var c2=document.createElement("canvas");c2.width=Math.max(1,Math.round(w*s2));c2.height=Math.max(1,Math.round(h*s2));c2.getContext("2d").drawImage(c,0,0,c2.width,c2.height);var tu=c2.toDataURL("image/jpeg",0.6);fi.value=du;if(ft)ft.value=tu;fp.src=du;fp.onerror=()=>{fp.src="";fp.style.display="none";};fp.style.display="block";};img.src=r.result;};r.readAsDataURL(file);};
+  if(fi)fi.oninput=function(){if(ft)ft.value="";var v=fi.value.trim();if(v){fp.src=v;fp.onerror=()=>{fp.src="";fp.style.display="none";};fp.style.display="block";}else{fp.style.display="none";}};
   })();
   const close=()=>overlay.remove();
   overlay.onclick=e=>{ if(e.target===overlay) close(); };
@@ -1372,7 +1381,7 @@ function openEditor(key, item){
       else d[f.key]=(val("#f-cf-"+f.key)||"").trim();
     });
     // save image
-    d.image=(val("#f-image")||"").trim();
+    d.image=(val("#f-image")||"").trim();d.imageThumb=(val("#f-image-thumb")||"").trim();if(!d.imageThumb)delete d.imageThumb;
     if(!editing) (data[key]=data[key]||[]).unshift(d);
     persist(); close();
   };
@@ -1393,16 +1402,13 @@ function newItem(m){
 
 /* ---------- delete confirm ---------- */
 function confirmDelete(key,id){
-  const item=(data[key]||[]).find(i=>i.id==id); if(!item) return;
-  const overlay=document.createElement("div"); overlay.className="overlay";
-  overlay.innerHTML=`<div class="modal"><div class="grab"></div><h2>删除记录</h2>
-    <div class="sub">确定删除「${esc(item.title||'这条记录')}」？此操作不可撤销。</div>
-    <div class="modal-actions"><button class="btn ghost" id="c-cancel">取消</button><button class="btn danger" id="c-ok">删除</button></div></div>`;
-  document.body.appendChild(overlay);
-  const close=()=>overlay.remove();
-  overlay.onclick=e=>{ if(e.target===overlay) close(); };
-  overlay.querySelector("#c-cancel").onclick=close;
-  overlay.querySelector("#c-ok").onclick=()=>{ data[key]=data[key].filter(i=>i.id!=id); persist(); close(); };
+  const list=data[key]||[]; const idx=list.findIndex(i=>i.id==id); if(idx<0) return;
+  const item=list[idx];
+  list.splice(idx,1); persist();   // 直接删除，toast 内 5 秒可撤销
+  toast("已删除「"+String(item.title||'这条记录').slice(0,18)+"」", { label:"撤销", fn:()=>{
+    if(!data[key]) data[key]=[];
+    if(!data[key].some(i=>i.id==id)){ data[key].splice(Math.min(idx,data[key].length),0,item); persist(); }
+  }});
 }
 
 /* ---------- router / nav ---------- */
@@ -1462,10 +1468,15 @@ $("#avatarInput").onchange = e => {
 
 /* ---------- 数据备份 / 恢复（逃生舱） ---------- */
 let toastTimer=null;
-function toast(msg){
+function toast(msg, action){
   let t=$("#toast"); if(!t){ t=document.createElement("div"); t.id="toast"; t.className="toast"; document.body.appendChild(t); }
-  t.textContent=msg; t.classList.add("show");
-  clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("show"), 2600);
+  t.textContent=msg;
+  if(t._btn){ t._btn.remove(); t._btn=null; }
+  if(action){ const b=document.createElement("button"); b.className="toast-act"; b.textContent=action.label;
+    b.onclick=()=>{ try{action.fn();}catch(e){} t.classList.remove("show"); if(t._btn){ t._btn.remove(); t._btn=null; } };
+    t.appendChild(b); t._btn=b; }
+  t.classList.add("show");
+  clearTimeout(toastTimer); toastTimer=setTimeout(()=>{ t.classList.remove("show"); if(t._btn){ t._btn.remove(); t._btn=null; } }, action?5200:2600);
 }
 function exportData(){
   const payload=JSON.stringify({ app:"personal-workbench", version:1, storageKey:CONFIG.storageKey, exportedAt:new Date().toISOString(), data }, null, 2);
@@ -1953,5 +1964,6 @@ sync.startAuto(); if(sync.on) sync.pull(true).then(()=>{ if((sync.cfg().rev||0)=
   else { document.addEventListener('DOMContentLoaded', function() { setTimeout(initEnhancements, 100); }); }
 
 </script>
-<script>try{localStorage.setItem("workbench-entry",location.pathname.split("/").pop())}catch(e){}</script></body>
+<script>try{localStorage.setItem("workbench-entry",location.pathname.split("/").pop())}catch(e){}</script><script>if('serviceWorker' in navigator){addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}</script>
+</body>
 </html>

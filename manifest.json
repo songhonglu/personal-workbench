@@ -1,0 +1,14 @@
+{
+  "name": "Song 的工作台",
+  "short_name": "工作台",
+  "description": "计划 · 专注 · 记录 · 成长",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#E8F5E9",
+  "theme_color": "#2f7d51",
+  "icons": [
+    { "src": "icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any maskable" },
+    { "src": "icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any maskable" }
+  ]
+}

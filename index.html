@@ -39,6 +39,13 @@
   .links a:hover{filter:brightness(.97)}
   @media (prefers-reduced-motion:reduce){.spin{animation:none}}
 </style>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#2f7d51">
+<meta name="mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="工作台">
+<link rel="apple-touch-icon" href="icon-192.png">
 </head>
 <body>
 <div class="wrap">
@@ -68,5 +75,6 @@
   location.replace(file);
 })();
 </script>
+<script>if('serviceWorker' in navigator){addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}</script>
 </body>
 </html>
