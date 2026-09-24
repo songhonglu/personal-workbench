@@ -859,9 +859,10 @@ function icon(name, size=22, sw=1.7){
 /* ============================================================
    ENGINE — 一般无需改动
    ============================================================ */
-function isoToday(){ return new Date().toISOString().slice(0,10); }
+function fmtLocal(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }   // v1.3.1 本地日期，替代 toISOString(UTC)
+function isoToday(){ return fmtLocal(new Date()); }
 function today(){ return isoToday(); }
-function daysAgo(n){ const d=new Date(); d.setDate(d.getDate()-n); return d.toISOString().slice(0,10); }
+function daysAgo(n){ const d=new Date(); d.setDate(d.getDate()-n); return fmtLocal(d); }
 
 /* ---- v1.3 趋势自动化：每日状态分（0-10）= 待办完成度 4 分 + 打卡完成度 4 分 + 当日有笔记 2 分 ---- */
 function trendScoreToday(){
@@ -885,7 +886,6 @@ function trendXLabels(){
   for(let i=6;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); out+="<span>"+dn[d.getDay()]+"</span>"; }
   return out;
 }
-function daysAgo(n){ const d=new Date(); d.setDate(d.getDate()-n); return d.toISOString().slice(0,10); }
 function avgProgress(list){
   if(!list||!list.length) return { value:0, sub:"0" };
   const v = Math.round(list.reduce((s,x)=>s+Math.min(100,(x.current/x.target)*100||0),0)/list.length);
@@ -1043,7 +1043,7 @@ function pad2(n){ return String(n).padStart(2,"0"); }
 /* 本周（周一起）7 天的 ISO 日期 */
 function weekDates(){
   const n=new Date(); const dow=(n.getDay()+6)%7; const mon=new Date(n); mon.setDate(n.getDate()-dow);
-  const arr=[]; for(let i=0;i<7;i++){ const d=new Date(mon); d.setDate(mon.getDate()+i); arr.push(d.toISOString().slice(0,10)); }
+  const arr=[]; for(let i=0;i<7;i++){ const d=new Date(mon); d.setDate(mon.getDate()+i); arr.push(fmtLocal(d)); }
   return arr;
 }
 function weekNum(){ const n=new Date(); const s=new Date(n.getFullYear(),0,1);
@@ -1536,7 +1536,7 @@ function recHTML(m,x){
 }
 
 function streak(log){ if(!log) return 0; let n=0; const d=new Date();
-  for(;;){ const k=d.toISOString().slice(0,10); if(log[k]){ n++; d.setDate(d.getDate()-1);} else break; } return n; }
+  for(;;){ const k=fmtLocal(d); if(log[k]){ n++; d.setDate(d.getDate()-1);} else break; } return n; }
 
 function wireModule(key){ const m=modOf(key);
   $("#screen").querySelectorAll(".js-chk").forEach(el=>el.onclick=e=>{ e.stopPropagation();
@@ -1903,7 +1903,7 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
     // --- 周期任务 ---
     function checkRecurring(){
       const todos = data.todo || [];
-      const today = new Date().toISOString().slice(0,10);
+      const today = isoToday();
       let changed = false;
       todos.forEach(t => {
         if (!t.repeat || t.repeat === 'none' || !t.done) return;
