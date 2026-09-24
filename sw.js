@@ -2,7 +2,7 @@
    • 只缓存同源 GET（页面/图标/manifest）
    • 云同步(pages.dev)与天气(open-meteo)是跨域请求，不拦截，永远走网络
    • 版本号升级 = 缓存自动淘汰 */
-const CACHE = 'wb-v1.6.0';
+const CACHE = 'wb-v1.7.0';
 const CORE = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {

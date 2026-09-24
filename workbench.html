@@ -4,57 +4,57 @@
 <head>
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-<title>☕ 我的工作台 · Mocha</title>
+<title>🌻 我的工作台 · Amber</title>
 <style>
   /* ============================================================
      THEME TOKENS — 一处改色，整站换肤（冷色科技默认）
      ============================================================ */
   :root {
     /* ---- 页面与表面 ---- */
-    --page-bg: #F5E6D3;
+    --page-bg: #FFFDE7;
     --surface-card: #FFFFFF;
-    --surface-nested: #FAF0E0;
-    --surface-glass: rgba(255,255,255,.75);
+    --surface-nested: #FFFAF0;
+    --surface-glass: rgba(255,255,255,.78);
 
     /* ---- 边框 ---- */
-    --border: #E8D5C0;
-    --border-input: #D4C0A8;
+    --border: #F0E8C0;
+    --border-input: #E0D8A8;
     --glass-border: rgba(255,255,255,.6);
 
     /* ---- 文本层级 ---- */
-    --text: #5D4037;
-    --text-secondary: #7D6555;
+    --text: #4E342E;
+    --text-secondary: #6D4C41;
     --text-tertiary: #A1887F;
 
     /* ---- 主色 ---- */
-    --accent: #B08968;
-    --accent-dark: #9C6F4A;
-    --accent-light: #D4A574;
-    --accent-muted: #F5E6D3;
-    --accent-glow: rgba(176,137,104,.4);
+    --accent: #FFB74D;
+    --accent-dark: #FFA726;
+    --accent-light: #FFE082;
+    --accent-muted: #FFF8E1;
+    --accent-glow: rgba(255,167,38,.4);
     --on-accent: #FFFFFF;
 
     /* ---- 模块色（5 色轮转） ---- */
-    --module-1: #B08968;
-    --module-2: #CB997E;
-    --module-3: #E6A85C;
-    --module-4: #9A5A6A;
-    --module-5: #6D4C41;
+    --module-1: #FFA726;
+    --module-2: #FF7043;
+    --module-3: #FFB300;
+    --module-4: #EF5350;
+    --module-5: #7E57C2;
 
     /* ---- 危险色 ---- */
-    --danger: #9A5A6A;
-    --danger-muted: #C48A9A;
+    --danger: #EF5350;
+    --danger-muted: #EF9A9A;
 
     /* ---- 抽屉/侧栏（深色面板） ---- */
-    --drawer-bg: #2D2018;
-    --drawer-bg-top: #3D2817;
-    --drawer-text: #F5E6D3;
-    --drawer-text-mute: rgba(245,230,211,.55);
-    --drawer-hover: rgba(245,230,211,.08);
-    --drawer-active: rgba(245,230,211,.12);
+    --drawer-bg: #2D2010;
+    --drawer-bg-top: #3D2818;
+    --drawer-text: #FFF8E1;
+    --drawer-text-mute: rgba(255,248,225,.55);
+    --drawer-hover: rgba(255,248,225,.08);
+    --drawer-active: rgba(255,248,225,.12);
 
     /* ---- 背景图 ---- */
-    --greet-image: radial-gradient(120% 130% at 85% 15%, rgba(176,137,104,.14), rgba(176,137,104,.05) 55%, rgba(176,137,104,0) 100%);
+    --greet-image: radial-gradient(120% 130% at 85% 15%, rgba(255,167,38,.14), rgba(255,167,38,.05) 55%, rgba(255,167,38,0) 100%);
     --page-texture: none;
 
     /* ---- 圆角 ---- */
@@ -64,17 +64,17 @@
     --radius-sheet: 22px;
 
     /* ---- 阴影 ---- */
-    --shadow-card: 0 4px 16px rgba(176,137,104,.1);
-    --shadow-overlay: 0 8px 32px rgba(176,137,104,.15), 0 2px 8px rgba(0,0,0,.04);
-    --shadow-hover: 0 16px 48px rgba(176,137,104,.22), 0 4px 12px rgba(0,0,0,.06);
+    --shadow-card: 0 4px 16px rgba(255,167,38,.1);
+    --shadow-overlay: 0 8px 32px rgba(255,167,38,.15), 0 2px 8px rgba(0,0,0,.04);
+    --shadow-hover: 0 16px 48px rgba(255,167,38,.22), 0 4px 12px rgba(0,0,0,.06);
 
     /* ---- 视觉效果 token ---- */
-    --body-glow-1: rgba(176,137,104,.08);
-    --body-glow-2: rgba(203,153,126,.06);
-    --body-glow-3: rgba(230,168,92,.04);
-    --orb-1: rgba(176,137,104,.12);
-    --orb-2: rgba(203,153,126,.1);
-    --orb-3: rgba(230,168,92,.08);
+    --body-glow-1: rgba(255,167,38,.08);
+    --body-glow-2: rgba(255,112,67,.06);
+    --body-glow-3: rgba(255,179,0,.04);
+    --orb-1: rgba(255,167,38,.12);
+    --orb-2: rgba(255,112,67,.1);
+    --orb-3: rgba(255,179,0,.08);
     --noise-opacity: 0.03;
 
     /* ---- 字体与布局 ---- */
@@ -591,26 +591,329 @@
   .reveal { opacity: 0; transform: translateY(24px); transition: opacity .5s ease, transform .5s ease; }
   .reveal.in { opacity: 1; transform: translateY(0); }
 
+  /* ---- skin switcher (v1.7) ---- */
+  .skin-wrap{position:relative;display:inline-flex}
+  .skin-pop{position:absolute;top:calc(100% + 10px);right:-6px;background:var(--surface-card);border:1px solid var(--border);border-radius:14px;padding:10px;display:none;flex-direction:column;gap:2px;box-shadow:var(--shadow-overlay);z-index:80;min-width:132px}
+  .skin-pop.show{display:flex}
+  .skin-dot{display:flex;align-items:center;gap:8px;background:none;border:none;cursor:pointer;font:inherit;font-size:13px;color:var(--text-secondary);padding:7px 9px;border-radius:9px;text-align:left}
+  .skin-dot:hover{background:var(--surface-nested)}
+  .skin-dot i{width:16px;height:16px;border-radius:50%;display:inline-block;flex:0 0 auto;box-shadow:inset 0 0 0 1px rgba(0,0,0,.1)}
+  .skin-dot.on{color:var(--text);font-weight:600}
+  .skin-dot.on i{outline:2px solid var(--accent);outline-offset:2px}
+  /* ---- onboarding guide (v1.7) ---- */
+  .ob{position:fixed;inset:0;background:rgba(15,23,42,.45);backdrop-filter:blur(3px);display:none;align-items:center;justify-content:center;z-index:120;padding:20px}
+  .ob.show{display:flex}
+  .ob-card{background:var(--surface-card);border:1px solid var(--border);border-radius:20px;max-width:440px;width:100%;max-height:86vh;overflow:auto;padding:26px 24px;box-shadow:var(--shadow-overlay)}
+  .ob-t{font-size:19px;font-weight:700;color:var(--text);margin-bottom:16px}
+  .ob-item{display:flex;gap:11px;margin-bottom:12px;font-size:13.5px;line-height:1.55;color:var(--text-secondary)}
+  .ob-item b{color:var(--text);font-weight:600}
+  .ob-ic{flex:0 0 auto;font-size:17px;line-height:1.45}
+  .ob-btn{width:100%;margin-top:12px;padding:11px;border:none;border-radius:12px;background:var(--accent);color:var(--on-accent,#fff);font:inherit;font-size:14.5px;font-weight:600;cursor:pointer}
+  .ob-btn:hover{filter:brightness(1.06)}
+  @media (max-width:520px){.ob-card{padding:22px 18px;border-radius:16px}}
+
+  :root[data-skin="mint"]{
+    /* ---- 页面与表面 ---- */
+    --page-bg: #E8F5E9;
+    --surface-card: #FFFFFF;
+    --surface-nested: #F5FBF5;
+    --surface-glass: rgba(255,255,255,.75);
+
+    /* ---- 边框 ---- */
+    --border: #D8EED8;
+    --border-input: #C5E3C5;
+    --glass-border: rgba(255,255,255,.6);
+
+    /* ---- 文本层级 ---- */
+    --text: #2E5E2E;
+    --text-secondary: #5B7D5B;
+    --text-tertiary: #8FBC8F;
+
+    /* ---- 主色 ---- */
+    --accent: #66BB6A;
+    --accent-dark: #43A047;
+    --accent-light: #A5D6A7;
+    --accent-muted: #E8F5E9;
+    --accent-glow: rgba(102,187,106,.4);
+    --on-accent: #FFFFFF;
+
+    /* ---- 模块色（5 色轮转） ---- */
+    --module-1: #66BB6A;
+    --module-2: #26A69A;
+    --module-3: #FFB74D;
+    --module-4: #EC407A;
+    --module-5: #7E57C2;
+
+    /* ---- 危险色 ---- */
+    --danger: #EC407A;
+    --danger-muted: #F8BBD0;
+
+    /* ---- 抽屉/侧栏（深色面板） ---- */
+    --drawer-bg: #1B2D1F;
+    --drawer-bg-top: #1E3225;
+    --drawer-text: #C8E6C9;
+    --drawer-text-mute: rgba(200,230,201,.55);
+    --drawer-hover: rgba(200,230,201,.08);
+    --drawer-active: rgba(200,230,201,.12);
+
+    /* ---- 背景图 ---- */
+    --greet-image: radial-gradient(120% 130% at 85% 15%, rgba(102,187,106,.14), rgba(102,187,106,.05) 55%, rgba(102,187,106,0) 100%);
+    --page-texture: none;
+
+    /* ---- 圆角 ---- */
+    --radius-control: 8px;
+    --radius-tile: 12px;
+    --radius-card: 16px;
+    --radius-sheet: 22px;
+
+    /* ---- 阴影 ---- */
+    --shadow-card: 0 4px 16px rgba(102,187,106,.1);
+    --shadow-overlay: 0 8px 32px rgba(102,187,106,.15), 0 2px 8px rgba(0,0,0,.04);
+    --shadow-hover: 0 16px 48px rgba(102,187,106,.22), 0 4px 12px rgba(0,0,0,.06);
+
+    /* ---- 视觉效果 token ---- */
+    --body-glow-1: rgba(102,187,106,.08);
+    --body-glow-2: rgba(38,166,154,.06);
+    --body-glow-3: rgba(255,183,77,.04);
+    --orb-1: rgba(102,187,106,.12);
+    --orb-2: rgba(38,166,154,.1);
+    --orb-3: rgba(255,183,77,.08);
+    --noise-opacity: 0.03;
+
+    /* ---- 字体与布局 ---- */
+    --font: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    --sidebar-w: 258px;
+  }
+  :root[data-skin="mocha"]{
+    /* ---- 页面与表面 ---- */
+    --page-bg: #F5E6D3;
+    --surface-card: #FFFFFF;
+    --surface-nested: #FAF0E0;
+    --surface-glass: rgba(255,255,255,.75);
+
+    /* ---- 边框 ---- */
+    --border: #E8D5C0;
+    --border-input: #D4C0A8;
+    --glass-border: rgba(255,255,255,.6);
+
+    /* ---- 文本层级 ---- */
+    --text: #5D4037;
+    --text-secondary: #7D6555;
+    --text-tertiary: #A1887F;
+
+    /* ---- 主色 ---- */
+    --accent: #B08968;
+    --accent-dark: #9C6F4A;
+    --accent-light: #D4A574;
+    --accent-muted: #F5E6D3;
+    --accent-glow: rgba(176,137,104,.4);
+    --on-accent: #FFFFFF;
+
+    /* ---- 模块色（5 色轮转） ---- */
+    --module-1: #B08968;
+    --module-2: #CB997E;
+    --module-3: #E6A85C;
+    --module-4: #9A5A6A;
+    --module-5: #6D4C41;
+
+    /* ---- 危险色 ---- */
+    --danger: #9A5A6A;
+    --danger-muted: #C48A9A;
+
+    /* ---- 抽屉/侧栏（深色面板） ---- */
+    --drawer-bg: #2D2018;
+    --drawer-bg-top: #3D2817;
+    --drawer-text: #F5E6D3;
+    --drawer-text-mute: rgba(245,230,211,.55);
+    --drawer-hover: rgba(245,230,211,.08);
+    --drawer-active: rgba(245,230,211,.12);
+
+    /* ---- 背景图 ---- */
+    --greet-image: radial-gradient(120% 130% at 85% 15%, rgba(176,137,104,.14), rgba(176,137,104,.05) 55%, rgba(176,137,104,0) 100%);
+    --page-texture: none;
+
+    /* ---- 圆角 ---- */
+    --radius-control: 8px;
+    --radius-tile: 12px;
+    --radius-card: 16px;
+    --radius-sheet: 22px;
+
+    /* ---- 阴影 ---- */
+    --shadow-card: 0 4px 16px rgba(176,137,104,.1);
+    --shadow-overlay: 0 8px 32px rgba(176,137,104,.15), 0 2px 8px rgba(0,0,0,.04);
+    --shadow-hover: 0 16px 48px rgba(176,137,104,.22), 0 4px 12px rgba(0,0,0,.06);
+
+    /* ---- 视觉效果 token ---- */
+    --body-glow-1: rgba(176,137,104,.08);
+    --body-glow-2: rgba(203,153,126,.06);
+    --body-glow-3: rgba(230,168,92,.04);
+    --orb-1: rgba(176,137,104,.12);
+    --orb-2: rgba(203,153,126,.1);
+    --orb-3: rgba(230,168,92,.08);
+    --noise-opacity: 0.03;
+
+    /* ---- 字体与布局 ---- */
+    --font: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    --sidebar-w: 258px;
+  }
+  :root[data-skin="rose"]{
+    /* ---- 页面与表面 ---- */
+    --page-bg: #FFF0F5;
+    --surface-card: #FFFFFF;
+    --surface-nested: #FFF5F8;
+    --surface-glass: rgba(255,255,255,.75);
+
+    /* ---- 边框 ---- */
+    --border: #F0D8E0;
+    --border-input: #E0C0CC;
+    --glass-border: rgba(255,255,255,.6);
+
+    /* ---- 文本层级 ---- */
+    --text: #4A2A3A;
+    --text-secondary: #7A5A6A;
+    --text-tertiary: #A5788A;
+
+    /* ---- 主色 ---- */
+    --accent: #F06292;
+    --accent-dark: #EC407A;
+    --accent-light: #F8BBD0;
+    --accent-muted: #FFF0F3;
+    --accent-glow: rgba(240,98,146,.4);
+    --on-accent: #FFFFFF;
+
+    /* ---- 模块色（5 色轮转） ---- */
+    --module-1: #F06292;
+    --module-2: #FF80AB;
+    --module-3: #FFB74D;
+    --module-4: #BA68C3;
+    --module-5: #7B1FA2;
+
+    /* ---- 危险色 ---- */
+    --danger: #BA68C3;
+    --danger-muted: #CE93D8;
+
+    /* ---- 抽屉/侧栏（深色面板） ---- */
+    --drawer-bg: #2D1A22;
+    --drawer-bg-top: #3D2A32;
+    --drawer-text: #FFF0F5;
+    --drawer-text-mute: rgba(255,240,245,.55);
+    --drawer-hover: rgba(255,240,245,.08);
+    --drawer-active: rgba(255,240,245,.12);
+
+    /* ---- 背景图 ---- */
+    --greet-image: radial-gradient(120% 130% at 85% 15%, rgba(240,98,146,.14), rgba(240,98,146,.05) 55%, rgba(240,98,146,0) 100%);
+    --page-texture: none;
+
+    /* ---- 圆角 ---- */
+    --radius-control: 8px;
+    --radius-tile: 12px;
+    --radius-card: 16px;
+    --radius-sheet: 22px;
+
+    /* ---- 阴影 ---- */
+    --shadow-card: 0 4px 16px rgba(240,98,146,.1);
+    --shadow-overlay: 0 8px 32px rgba(240,98,146,.15), 0 2px 8px rgba(0,0,0,.04);
+    --shadow-hover: 0 16px 48px rgba(240,98,146,.22), 0 4px 12px rgba(0,0,0,.06);
+
+    /* ---- 视觉效果 token ---- */
+    --body-glow-1: rgba(240,98,146,.08);
+    --body-glow-2: rgba(255,128,171,.06);
+    --body-glow-3: rgba(255,183,77,.04);
+    --orb-1: rgba(240,98,146,.12);
+    --orb-2: rgba(255,128,171,.1);
+    --orb-3: rgba(255,183,77,.08);
+    --noise-opacity: 0.03;
+
+    /* ---- 字体与布局 ---- */
+    --font: -apple-system, "PingFang SC", "Microsoft YaHei", system-ui, sans-serif;
+    --sidebar-w: 258px;
+  }
   /* ---- gradient progress bars ---- */
-  .gbar-1 { background: linear-gradient(90deg, #B08968, #9C6F4A); }
-  .gbar-2 { background: linear-gradient(90deg, #CB997E, #A07560); }
-  .gbar-3 { background: linear-gradient(90deg, #E6A85C, #FF9800); }
-  .gbar-4 { background: linear-gradient(90deg, #9A5A6A, #7A3A4A); }
+  [data-skin="mint"] .gbar-1 { background: linear-gradient(90deg, #66BB6A, #43A047); }
+  [data-skin="mint"] .gbar-2 { background: linear-gradient(90deg, #26A69A, #00897B); }
+  [data-skin="mint"] .gbar-3 { background: linear-gradient(90deg, #FFB74D, #FF9800); }
+  [data-skin="mint"] .gbar-4 { background: linear-gradient(90deg, #EC407A, #C2185B); }
 
   /* ---- SVG ring gradient defs ---- */
-  .ring-grad-1 { stop-color: #B08968; }
-  .ring-grad-1b { stop-color: #9C6F4A; }
-  .ring-grad-2 { stop-color: #E6A85C; }
-  .ring-grad-2b { stop-color: #FF9800; }
-  .ring-grad-3 { stop-color: #CB997E; }
-  .ring-grad-3b { stop-color: #A07560; }
-  .ring-grad-4 { stop-color: #9A5A6A; }
-  .ring-grad-4b { stop-color: #7A3A4A; }
+  [data-skin="mint"] .ring-grad-1 { stop-color: #66BB6A; }
+  [data-skin="mint"] .ring-grad-1b { stop-color: #43A047; }
+  [data-skin="mint"] .ring-grad-2 { stop-color: #FFB74D; }
+  [data-skin="mint"] .ring-grad-2b { stop-color: #FF9800; }
+  [data-skin="mint"] .ring-grad-3 { stop-color: #26A69A; }
+  [data-skin="mint"] .ring-grad-3b { stop-color: #00897B; }
+  [data-skin="mint"] .ring-grad-4 { stop-color: #EC407A; }
+  [data-skin="mint"] .ring-grad-4b { stop-color: #C2185B; }
 
   /* ---- trend chart colors ---- */
-  .trend-stroke { stroke: #B08968; }
-  .trend-fill { stop-color: #B08968; }
-  .trend-grid { stroke: #F5E6D3; }
+  [data-skin="mint"] .trend-stroke { stroke: #66BB6A; }
+  [data-skin="mint"] .trend-fill { stop-color: #66BB6A; }
+  [data-skin="mint"] .trend-grid { stroke: #E8F5E9; }
+  [data-skin="mint"] .trend-label { fill: #8FBC8F; }
+
+  /* ---- gradient progress bars ---- */
+  [data-skin="mocha"] .gbar-1 { background: linear-gradient(90deg, #B08968, #9C6F4A); }
+  [data-skin="mocha"] .gbar-2 { background: linear-gradient(90deg, #CB997E, #A07560); }
+  [data-skin="mocha"] .gbar-3 { background: linear-gradient(90deg, #E6A85C, #FF9800); }
+  [data-skin="mocha"] .gbar-4 { background: linear-gradient(90deg, #9A5A6A, #7A3A4A); }
+
+  /* ---- SVG ring gradient defs ---- */
+  [data-skin="mocha"] .ring-grad-1 { stop-color: #B08968; }
+  [data-skin="mocha"] .ring-grad-1b { stop-color: #9C6F4A; }
+  [data-skin="mocha"] .ring-grad-2 { stop-color: #E6A85C; }
+  [data-skin="mocha"] .ring-grad-2b { stop-color: #FF9800; }
+  [data-skin="mocha"] .ring-grad-3 { stop-color: #CB997E; }
+  [data-skin="mocha"] .ring-grad-3b { stop-color: #A07560; }
+  [data-skin="mocha"] .ring-grad-4 { stop-color: #9A5A6A; }
+  [data-skin="mocha"] .ring-grad-4b { stop-color: #7A3A4A; }
+
+  /* ---- trend chart colors ---- */
+  [data-skin="mocha"] .trend-stroke { stroke: #B08968; }
+  [data-skin="mocha"] .trend-fill { stop-color: #B08968; }
+  [data-skin="mocha"] .trend-grid { stroke: #F5E6D3; }
+  [data-skin="mocha"] .trend-label { fill: #A1887F; }
+
+  /* ---- gradient progress bars ---- */
+  [data-skin="rose"] .gbar-1 { background: linear-gradient(90deg, #F06292, #EC407A); }
+  [data-skin="rose"] .gbar-2 { background: linear-gradient(90deg, #FF80AB, #F06292); }
+  [data-skin="rose"] .gbar-3 { background: linear-gradient(90deg, #FFB74D, #FF9800); }
+  [data-skin="rose"] .gbar-4 { background: linear-gradient(90deg, #BA68C3, #AB47BC); }
+
+  /* ---- SVG ring gradient defs ---- */
+  [data-skin="rose"] .ring-grad-1 { stop-color: #F06292; }
+  [data-skin="rose"] .ring-grad-1b { stop-color: #EC407A; }
+  [data-skin="rose"] .ring-grad-2 { stop-color: #FFB74D; }
+  [data-skin="rose"] .ring-grad-2b { stop-color: #FF9800; }
+  [data-skin="rose"] .ring-grad-3 { stop-color: #FF80AB; }
+  [data-skin="rose"] .ring-grad-3b { stop-color: #F06292; }
+  [data-skin="rose"] .ring-grad-4 { stop-color: #BA68C3; }
+  [data-skin="rose"] .ring-grad-4b { stop-color: #AB47BC; }
+
+  /* ---- trend chart colors ---- */
+  [data-skin="rose"] .trend-stroke { stroke: #F06292; }
+  [data-skin="rose"] .trend-fill { stop-color: #F06292; }
+  [data-skin="rose"] .trend-grid { stroke: #FFF0F3; }
+  [data-skin="rose"] .trend-label { fill: #A5788A; }
+
+  /* ---- gradient progress bars ---- */
+  .gbar-1 { background: linear-gradient(90deg, #FFA726, #FB8C00); }
+  .gbar-2 { background: linear-gradient(90deg, #FF7043, #F4511E); }
+  .gbar-3 { background: linear-gradient(90deg, #FFB300, #FF8F00); }
+  .gbar-4 { background: linear-gradient(90deg, #EF5350, #C62828); }
+
+  /* ---- SVG ring gradient defs ---- */
+  .ring-grad-1 { stop-color: #FFA726; }
+  .ring-grad-1b { stop-color: #FB8C00; }
+  .ring-grad-2 { stop-color: #FFB300; }
+  .ring-grad-2b { stop-color: #FF8F00; }
+  .ring-grad-3 { stop-color: #FF7043; }
+  .ring-grad-3b { stop-color: #F4511E; }
+  .ring-grad-4 { stop-color: #EF5350; }
+  .ring-grad-4b { stop-color: #C62828; }
+
+  /* ---- trend chart colors ---- */
+  .trend-stroke { stroke: #FFA726; }
+  .trend-fill { stop-color: #FFA726; }
+  .trend-grid { stroke: #FFF8E1; }
   .trend-label { fill: #A1887F; }
 
   /* ---- reduced motion ---- */
@@ -729,7 +1032,7 @@
         <div class="wb-w-hint">输入城市名搜索，点击选择。首次使用会请求定位权限。</div>
       </div>
     </div>
-    <button class="wb-theme-btn" id="wb-theme" title="切换深色/浅色">🌙</button>
+    <button class="wb-theme-btn" id="wb-help" title="使用指南">❓</button><span class="skin-wrap"><button class="wb-theme-btn" id="wb-skin" title="切换主题配色">🎨</button><div class="skin-pop" id="skin-pop"></div></span><button class="wb-theme-btn" id="wb-theme" title="切换深色/浅色">🌙</button>
   </div>
 <div id="screen"></div></main>
 </div>
@@ -1075,6 +1378,7 @@ let view = "home";
 let searchQ = "";
 let pomo = { running:false, remain:25*60, total:25*60 };   // 番茄钟状态（内存态，跨渲染保留）
 let clockTimer = null;                                       // 全局秒级心跳（时钟 + 番茄钟）
+const EMPTY_HINTS={todo:"先把今天要做的 2-3 件事写下来，完成一条勾一条",checkin:"创建一个想坚持的小习惯，每天来打一次卡",read:"选一本书或一门课，从第一页开始推进",money:"记下第一笔收支，坚持一周就能看到趋势",note:"随手写下第一条想法、灵感或摘录"};
 function persist(){ store.save(); render(); }
 function pad2(n){ return String(n).padStart(2,"0"); }
 
@@ -1396,7 +1700,7 @@ function renderModule(key){
   }
 
   const body = it.length ? it.map(x=>recHTML(m,x)).join("")
-    : `<div class="empty"><span class="e">${icon(m.icon,28)}</span><div>${q?'没有匹配的记录':'还没有记录，点右上角「新建」添加第一条吧'}</div></div>`;
+    : `<div class="empty"><span class="e">${icon(m.icon,28)}</span><div>${q?'没有匹配的记录':'还没有'+m.name+'记录'}</div>${q?'':'<div style="font-size:12.5px;color:var(--text-tertiary);margin-top:6px">'+(EMPTY_HINTS[m.key]||'点右上角「新建」添加第一条吧')+'</div>'}</div>`;
 
   $("#screen").innerHTML=`<div class="header"><div><h2>${m.name}</h2><p>${m.desc}</p></div><div class="spacer"></div><span class="date-chip">${icon("calendar",14)} ${dateStr()}</span></div>
     <div class="toolbar">
@@ -1426,7 +1730,7 @@ function renderModuleResults(key){
   const q=searchQ.trim().toLowerCase();
   const it=q?all.filter(x=>(x.title||"").toLowerCase().includes(q)||(x.note||x.content||"").toLowerCase().includes(q)):all;
   const body = it.length ? it.map(x=>recHTML(m,x)).join("")
-    : `<div class="empty"><span class="e">${icon(m.icon,28)}</span><div>${q?'没有匹配的记录':'还没有记录，点右上角「新建」添加第一条吧'}</div></div>`;
+    : `<div class="empty"><span class="e">${icon(m.icon,28)}</span><div>${q?'没有匹配的记录':'还没有'+m.name+'记录'}</div>${q?'':'<div style="font-size:12.5px;color:var(--text-tertiary);margin-top:6px">'+(EMPTY_HINTS[m.key]||'点右上角「新建」添加第一条吧')+'</div>'}</div>`;
   const grid=$(".rec-grid"); if(grid) grid.innerHTML=body;
   const cnt=$("#rec-count"); if(cnt) cnt.textContent=`${it.length} 条`;
   wireModule(key);
@@ -2132,6 +2436,7 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
     sync.pull = async function(silent) {
       const oldTheme = data.__theme;
       const oldWeather = data.__weather;
+      const oldSkin = data.__skin;
       await _origSyncPull(silent);
       if (data.__theme !== oldTheme) {
         if (data.__theme === "dark") document.documentElement.setAttribute("data-theme","dark");
@@ -2144,6 +2449,7 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
         if(ico){const WMO2={0:"☀️",1:"🌤️",2:"⛅",3:"☁️",45:"🌫️",48:"🌫️",51:"🌦️",53:"🌦️",55:"🌧️",56:"🌧️",57:"🌧️",61:"🌧️",63:"🌧️",65:"🌧️",66:"🌧️",67:"🌧️",71:"🌨️",73:"🌨️",75:"❄️",77:"❄️",80:"🌦️",81:"🌧️",82:"🌧️",85:"🌨️",86:"❄️",95:"⛈️",96:"⛈️",99:"⛈️"};
         ico.textContent=WMO2[data.__weather.code]||"🌡️";t.textContent=data.__weather.temp!=null?data.__weather.temp+"°":"--";ci.textContent=data.__weather.city||"点击设置";}
       }
+      if ((data.__skin||"amber") !== (oldSkin||"amber")) { try{ window.applySkin && window.applySkin(data.__skin||"amber"); }catch(e){} }
     };
   
   })();
@@ -2258,5 +2564,72 @@ sync.startAuto(); if(sync.on) sync.pull(true).then(()=>{ if((sync.cfg().rev||0)=
 
 </script>
 <script>try{localStorage.setItem("workbench-entry",location.pathname.split("/").pop())}catch(e){}</script><script>if('serviceWorker' in navigator){addEventListener('load',function(){navigator.serviceWorker.register('sw.js').then(function(){ return navigator.serviceWorker.ready; }).then(function(reg){ try{ reg.active && reg.active.postMessage({precache: location.pathname}); }catch(e){} }).catch(function(){})})}</script>
+<div class="ob" id="ob">
+  <div class="ob-card">
+    <div class="ob-t">👋 欢迎使用我的工作台</div>
+    <div class="ob-item"><span class="ob-ic">🧭</span><div><b>切换模块</b>：左侧栏点击切换，数字键 1-5 秒切</div></div>
+    <div class="ob-item"><span class="ob-ic">➕</span><div><b>添加记录</b>：点右上角「新建」</div></div>
+    <div class="ob-item"><span class="ob-ic">✅</span><div><b>积累趋势</b>：完成待办、习惯打卡、写笔记都会累计成首页趋势分</div></div>
+    <div class="ob-item"><span class="ob-ic">⭐</span><div><b>今日要事</b>：点记录上的星标，把重要的事置顶到首页</div></div>
+    <div class="ob-item"><span class="ob-ic">🎨</span><div><b>外观</b>：右上角 🎨 换配色（琥珀/薄荷/摩卡/玫瑰），🌙 切深色模式</div></div>
+    <div class="ob-item"><span class="ob-ic">🔒</span><div><b>数据安全</b>：数据存本机，左下角「导出备份」定期备份；设置里可开多端同步；删除的记录可在回收站恢复</div></div>
+    <button class="ob-btn" id="ob-btn">开始使用</button>
+  </div>
+</div>
+<script>
+(function(){
+  var SKINS=[
+    {id:"amber",emoji:"🌻",name:"Amber",c:"#FFB74D"},
+    {id:"mint",emoji:"🌿",name:"Mint",c:"#66BB6A"},
+    {id:"mocha",emoji:"☕",name:"Mocha",c:"#B08968"},
+    {id:"rose",emoji:"🌹",name:"Rose",c:"#F06292"}
+  ];
+  function applySkin(id){
+    var d=document.documentElement;
+    if(id&&id!=="amber")d.setAttribute("data-skin",id);else d.removeAttribute("data-skin");
+    var s=SKINS.filter(function(x){return x.id===(id||"amber");})[0]||SKINS[0];
+    document.title=s.emoji+" 我的工作台 · "+s.name;
+    var dots=document.querySelectorAll(".skin-dot");
+    for(var i=0;i<dots.length;i++){dots[i].classList.toggle("on",dots[i].getAttribute("data-skin")===s.id);}
+  }
+  window.applySkin=applySkin;
+  function buildPop(){
+    var pop=document.getElementById("skin-pop");if(!pop)return;
+    pop.innerHTML=SKINS.map(function(s){return '<button class="skin-dot" data-skin="'+s.id+'"><i style="background:'+s.c+'"></i><span>'+s.emoji+' '+s.name+'</span></button>';}).join("");
+  }
+  function initSkin(){
+    try{applySkin((typeof data!=="undefined"&&data.__skin)||"amber");}catch(e){}
+    var btn=document.getElementById("wb-skin"),pop=document.getElementById("skin-pop");
+    if(btn&&pop)btn.onclick=function(){pop.classList.toggle("show");};
+    document.addEventListener("click",function(e){
+      if(!pop||!pop.classList.contains("show"))return;
+      if(e.target===btn||(pop.contains&&pop.contains(e.target)))return;
+      pop.classList.remove("show");
+    });
+    if(pop)pop.addEventListener("click",function(e){
+      var b=e.target.closest?e.target.closest(".skin-dot"):null;if(!b)return;
+      var id=b.getAttribute("data-skin");
+      try{data.__skin=id;store.save();}catch(err){}
+      applySkin(id);pop.classList.remove("show");
+      try{toast("已切换主题："+id);}catch(err){}
+    });
+  }
+  function showGuide(){var o=document.getElementById("ob");if(o)o.classList.add("show");}
+  function hideGuide(save){
+    var o=document.getElementById("ob");if(o)o.classList.remove("show");
+    if(save){try{data.__onboarded=true;store.save();}catch(e){}}
+  }
+  function init(){
+    buildPop();initSkin();
+    var h=document.getElementById("wb-help");if(h)h.onclick=showGuide;
+    var b=document.getElementById("ob-btn");if(b)b.onclick=function(){hideGuide(true);};
+    var o=document.getElementById("ob");
+    if(o)o.addEventListener("click",function(e){if(e.target===o)hideGuide(true);});
+    var first=false;try{first=!data.__onboarded;}catch(e){}
+    if(first)setTimeout(showGuide,900);
+  }
+  if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
+})();
+</script>
 </body>
 </html>

@@ -3,11 +3,11 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>🌿 Song 的工作台</title>
+<title>Song 的工作台</title>
 <style>
   :root{
-    --bg:#E8F5E9; --ink:#1f2d24; --ink-2:#5b6f63; --accent:#2f7d51;
-    --card:#ffffff; --line:#d9e8dd;
+    --bg:#f0f2f5; --ink:#232a33; --ink-2:#5c6774; --accent:#b07a28;
+    --card:#ffffff; --line:#dbe0e6;
   }
   *{margin:0;padding:0;box-sizing:border-box}
   html,body{height:100%}
@@ -20,7 +20,7 @@
   .glyph{
     width:64px;height:64px;border-radius:18px;background:var(--accent);color:#fff;
     display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:700;
-    box-shadow:0 10px 24px rgba(47,125,81,.28);
+    box-shadow:0 10px 24px rgba(176,122,40,.28);
   }
   h1{font-size:21px;font-weight:700;letter-spacing:.5px}
   .slogan{font-size:13px;color:var(--ink-2);letter-spacing:2px}
@@ -55,23 +55,25 @@
   <div class="spin" aria-hidden="true"></div>
   <div class="tip">正在进入…</div>
   <div class="links">
-    <a href="workbench-mint.html">电脑版</a>
-    <a href="workbench-mint-m.html">手机版</a>
-    <a href="workbench-mocha.html">Mocha</a>
-    <a href="workbench-mocha-m.html">Mocha·M</a>
-    <a href="workbench-rose.html">Rose</a>
-    <a href="workbench-rose-m.html">Rose·M</a>
-    <a href="workbench-amber.html">Amber</a>
-    <a href="workbench-amber-m.html">Amber·M</a>
+    <a href="workbench.html">电脑版</a>
+    <a href="workbench-m.html">手机版</a>
   </div>
 </div>
 <script>
 (function(){
   var saved=null; try{ saved=localStorage.getItem("workbench-entry"); }catch(e){}
+  // v1.7 主题合并迁移：旧入口指向已删除的 4×2 主题文件 → 映射到合并后的双文件
+  var mapped=null;
+  if(saved){
+    if(saved==="workbench.html"||saved==="workbench-m.html") mapped=saved;
+    else if(/-m\.html$/.test(saved)||/m\.html$/.test(saved)&&saved.indexOf("workbench-")===0) mapped="workbench-m.html";
+    else if(/\.html$/.test(saved)) mapped="workbench.html";
+  }
   var isMobile = window.matchMedia("(max-width: 760px)").matches
     || /Android|iPhone|iPod|Mobile|HarmonyOS/i.test(navigator.userAgent)
     || (/iPad|Macintosh/.test(navigator.userAgent) && "ontouchend" in document && window.matchMedia("(max-width: 1024px)").matches);
-  var file = saved || (isMobile ? "workbench-mint-m.html" : "workbench-mint.html");
+  var file = mapped || (isMobile ? "workbench-m.html" : "workbench.html");
+  try{ if(saved && saved!==file) localStorage.setItem("workbench-entry", file); }catch(e){}
   location.replace(file);
 })();
 </script>
