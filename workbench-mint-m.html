@@ -1221,8 +1221,9 @@ function recHTML(m,x){
   // feature layout: 大图在上 + 标题 + 正文 (适合有图记录)
   if(layout==='feature' && x.image){
     const body=(x.content||x.note||'').trim();
+    const bigImg=x.image?`<img class="thumb" src="${attr(x.image)}" alt="" onerror="this.style.display='none'">`:'';
     return `<div class="rec ${layoutCls}">${acts}<div class="top" data-edit="${x.id}" style="flex-direction:column">
-      ${thumb}
+      ${bigImg}
       <div class="feat-title">${esc(x.title||'无标题')}</div>
       ${body?`<div class="feat-body">${esc(body)}</div>`:''}
       ${customBlock?`<div style="padding:0 12px 12px">${customBlock}</div>`:''}</div></div>`;
@@ -1358,8 +1359,13 @@ function openEditor(key, item){
   if(fi)fi.oninput=function(){if(ft)ft.value="";var v=fi.value.trim();if(v){fp.src=v;fp.onerror=()=>{fp.src="";fp.style.display="none";};fp.style.display="block";}else{fp.style.display="none";}};
   })();
   const close=()=>overlay.remove();
-  overlay.onclick=e=>{ if(e.target===overlay) close(); };
-  overlay.querySelector("#m-cancel").onclick=close;
+  var _edDirty=false;
+  overlay.addEventListener('input',function(){_edDirty=true;});
+  overlay.addEventListener('change',function(){_edDirty=true;});
+  overlay.addEventListener('click',function(e){ if(e.target.closest&&e.target.closest('.opt')) _edDirty=true; });
+  var _tryClose=function(){ if(_edDirty && !confirm("有未保存的修改，确定丢弃？")) return; close(); };
+  overlay.onclick=e=>{ if(e.target===overlay) _tryClose(); };
+  overlay.querySelector("#m-cancel").onclick=_tryClose;
   // segmented pickers
   overlay.querySelectorAll(".seg").forEach(seg=>seg.querySelectorAll(".opt").forEach(o=>o.onclick=()=>{
     seg.querySelectorAll(".opt").forEach(x=>x.classList.remove("on")); o.classList.add("on");
@@ -1401,13 +1407,36 @@ function newItem(m){
 }
 
 /* ---------- delete confirm ---------- */
+function renderTrash(){
+  const el=$("#screen");
+  const tr=(data.__trash||[]);
+  const tTitle=t=>{ if(t.title) return String(t.title); if(t.content) return String(t.content).slice(0,40); if(t.amount!=null) return (t.type==="income"?"收入 ":"支出 ")+t.amount+(t.unit||" 元"); return "无标题"; };
+  const rows=tr.map(t=>'<div class="rec"><div style="display:flex;align-items:center;gap:10px;flex:1;min-width:0">'
+    +'<div style="flex:1;min-width:0"><div style="font-weight:600;font-size:14px;color:var(--text);white-space:nowrap;overflow:hidden;text-overflow:ellipsis">'+esc(tTitle(t))+'</div>'
+    +'<div style="font-size:12px;color:var(--text-tertiary);margin-top:2px">来自 '+esc(trashModName(t.__module))+' · 删除于 '+esc(t.__deletedAt||"—")+'</div></div>'
+    +'<button class="btn ghost js-tr-restore" data-id="'+attr(String(t.id))+'" data-mk="'+attr(String(t.__module||""))+'" style="font-size:12px;padding:4px 10px">恢复</button>'
+    +'<button class="btn ghost js-tr-purge" data-id="'+attr(String(t.id))+'" data-mk="'+attr(String(t.__module||""))+'" style="font-size:12px;padding:4px 10px;color:var(--danger,#b3403a)">彻底删除</button></div></div>').join("");
+  el.innerHTML='<div style="display:flex;align-items:baseline;justify-content:space-between;padding:18px 0 6px;flex-wrap:wrap;gap:4px"><h1 style="font-size:22px;margin:0">回收站</h1><span style="font-size:12px;color:var(--text-tertiary)">删除的记录保留 30 天，到期自动清除</span></div>'
+    +(tr.length?rows:'<div class="rec" style="justify-content:center;color:var(--text-tertiary)">回收站是空的</div>')
+    +(tr.length?'<div style="text-align:center;margin-top:14px"><button class="btn ghost" id="tr-empty">清空回收站</button></div>':'');
+  el.querySelectorAll(".js-tr-restore").forEach(b=>b.onclick=()=>restoreTrash(b.dataset.mk,b.dataset.id));
+  el.querySelectorAll(".js-tr-purge").forEach(b=>b.onclick=()=>{ if(!confirm("彻底删除后无法恢复，确定？"))return; purgeTrash(b.dataset.mk,b.dataset.id); });
+  const eb=el.querySelector("#tr-empty"); if(eb) eb.onclick=()=>{ if(!confirm("清空回收站？全部记录将被彻底删除。"))return; data.__trash=[]; persist(); toast("回收站已清空"); };
+}
+function trashModName(k){ const m=CONFIG.modules.find(x=>x.key===k); return m?m.name:(k||"—"); }
+function restoreTrash(mk,id){
+  const tr=data.__trash||[]; const i=tr.findIndex(t=>t.id==id&&t.__module===mk); if(i<0)return;
+  const item=tr[i]; tr.splice(i,1); delete item.__module; delete item.__deletedAt;
+  if(!data[mk]) data[mk]=[]; data[mk].unshift(item); persist(); toast("已恢复到「"+trashModName(mk)+"」");
+}
+function purgeTrash(mk,id){ data.__trash=(data.__trash||[]).filter(t=>!(t.id==id&&t.__module===mk)); persist(); }
 function confirmDelete(key,id){
   const list=data[key]||[]; const idx=list.findIndex(i=>i.id==id); if(idx<0) return;
   const item=list[idx];
-  list.splice(idx,1); persist();   // 直接删除，toast 内 5 秒可撤销
+  list.splice(idx,1); data.__trash=(data.__trash||[]); data.__trash.unshift(Object.assign({},item,{__module:key,__deletedAt:isoToday()})); if(data.__trash.length>200)data.__trash.length=200; persist();   // v1.5 软删除进回收站，30 天内可恢复
   toast("已删除「"+String(item.title||'这条记录').slice(0,18)+"」", { label:"撤销", fn:()=>{
     if(!data[key]) data[key]=[];
-    if(!data[key].some(i=>i.id==id)){ data[key].splice(Math.min(idx,data[key].length),0,item); persist(); }
+    if(!data[key].some(i=>i.id==id)){ data[key].splice(Math.min(idx,data[key].length),0,item); } data.__trash=(data.__trash||[]).filter(t=>!(t.id==id&&t.__module==key)); persist();
   }});
 }
 
@@ -1417,6 +1446,7 @@ function render(){
   // top title
   if(view==="home"){ $("#topTitle").firstChild.textContent="我的工作台"; $("#topSub").textContent=CONFIG.slogan; }
   else if(view==="insight"){ $("#topTitle").firstChild.textContent="洞察"; $("#topSub").textContent="统计与复盘"; }
+  else if(view==="trash"){ $("#topTitle").firstChild.textContent="回收站"; $("#topSub").textContent="已删除记录 · 30 天内可恢复"; }
   else { const m=modOf(view); $("#topTitle").firstChild.textContent=m?m.name:"我的工作台"; $("#topSub").textContent=m?m.desc:""; }
   // nav active
   $("#nav").querySelector('[data-nav="home"]').classList.toggle("active", view==="home");
@@ -1424,6 +1454,7 @@ function render(){
   // render body
   if(view==="home") renderHome();
   else if(view==="insight") renderInsight();
+  else if(view==="trash") renderTrash();
   else renderModule(view);
 }
 
@@ -1433,7 +1464,7 @@ function buildDrawer(){
   $("#drawerSlogan").textContent=CONFIG.slogan;
   const items=[`<div class="ditem" data-go="home">${icon("home",20)}首页</div>`]
     .concat(CONFIG.modules.map(m=>`<div class="ditem" data-go="${m.key}">${icon(m.icon,20)}${m.name}</div>`))
-    .concat([`<div class="ditem" data-go="insight">${icon("chart",20)}洞察</div>`]);
+    .concat([`<div class="ditem" data-go="insight">${icon("chart",20)}洞察</div>`, `<div class="ditem" data-go="trash">${icon("trash",20)}回收站</div>`]);
   $("#drawerList").innerHTML=items.join("");
   $("#drawerList").querySelectorAll("[data-go]").forEach(el=>el.onclick=()=>go(el.dataset.go));
 }
@@ -1479,6 +1510,7 @@ function toast(msg, action){
   clearTimeout(toastTimer); toastTimer=setTimeout(()=>{ t.classList.remove("show"); if(t._btn){ t._btn.remove(); t._btn=null; } }, action?5200:2600);
 }
 function exportData(){
+  try{ data.__lastExport=isoToday(); store.save(); }catch(e){}
   const payload=JSON.stringify({ app:"personal-workbench", version:1, storageKey:CONFIG.storageKey, exportedAt:new Date().toISOString(), data }, null, 2);
   const blob=new Blob([payload], {type:"application/json"});
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
@@ -1491,7 +1523,7 @@ function importData(file){
   r.onload=()=>{ try{
     const o=JSON.parse(r.result); const inc=o&&o.data;
     if(!inc||typeof inc!=="object"){ toast("文件格式不正确"); return; }
-    if(!confirm("导入将覆盖当前全部数据，确定继续？")) return;
+    try{ exportData(); }catch(e){} if(!confirm("导入将覆盖当前全部数据。当前数据已自动导出为备份文件，确定继续？")) return;
     data=inc; persist(); toast("导入成功，数据已恢复");
   }catch(e){ toast("解析失败："+e.message); } };
   r.readAsText(file);
@@ -1861,6 +1893,7 @@ buildDrawer();
 render();
 sync.badge(sync.on ? "自动同步中" : "未启用同步");
 sync.startAuto(); if(sync.on) sync.pull(true).then(()=>{ if((sync.cfg().rev||0)===0 && data && Object.keys(data).length) sync.push(); });
+(function(){ try{ var _cut=(function(){var _d=new Date();_d.setDate(_d.getDate()-30);return fmtLocal(_d);})(); if((data.__trash||[]).length){ var _before=data.__trash.length; data.__trash=data.__trash.filter(function(t){ return !t.__deletedAt || t.__deletedAt>=_cut; }); if(data.__trash.length!==_before) store.saveLocal(); } var _has=CONFIG.modules.some(function(m){ return (data[m.key]||[]).length>0; }); var _last=data.__lastExport||""; if(_has && (!_last || _last<=daysAgo(7))){ setTimeout(function(){ toast("距上次导出备份已超过 7 天，建议导出以防数据丢失", { label:"立即导出", fn:function(){ exportData(); } }); }, 3000); } }catch(e){} })();
 
   /* ============================================================
      VISUAL ENHANCEMENTS JS
@@ -1964,6 +1997,6 @@ sync.startAuto(); if(sync.on) sync.pull(true).then(()=>{ if((sync.cfg().rev||0)=
   else { document.addEventListener('DOMContentLoaded', function() { setTimeout(initEnhancements, 100); }); }
 
 </script>
-<script>try{localStorage.setItem("workbench-entry",location.pathname.split("/").pop())}catch(e){}</script><script>if('serviceWorker' in navigator){addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}</script>
+<script>try{localStorage.setItem("workbench-entry",location.pathname.split("/").pop())}catch(e){}</script><script>if('serviceWorker' in navigator){addEventListener('load',function(){navigator.serviceWorker.register('sw.js').then(function(){ return navigator.serviceWorker.ready; }).then(function(reg){ try{ reg.active && reg.active.postMessage({precache: location.pathname}); }catch(e){} }).catch(function(){})})}</script>
 </body>
 </html>

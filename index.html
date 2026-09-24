@@ -75,6 +75,6 @@
   location.replace(file);
 })();
 </script>
-<script>if('serviceWorker' in navigator){addEventListener('load',function(){navigator.serviceWorker.register('sw.js').catch(function(){})})}</script>
+<script>if('serviceWorker' in navigator){addEventListener('load',function(){navigator.serviceWorker.register('sw.js').then(function(){ return navigator.serviceWorker.ready; }).then(function(reg){ try{ reg.active && reg.active.postMessage({precache: location.pathname}); }catch(e){} }).catch(function(){})})}</script>
 </body>
 </html>
