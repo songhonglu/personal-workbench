@@ -3,80 +3,630 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>Song 的工作台</title>
-<style>
-  :root{
-    --bg:#f0f2f5; --ink:#232a33; --ink-2:#5c6774; --accent:#b07a28;
-    --card:#ffffff; --line:#dbe0e6;
-  }
-  *{margin:0;padding:0;box-sizing:border-box}
-  html,body{height:100%}
-  body{
-    font-family:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
-    background:var(--bg); color:var(--ink);
-    display:flex; align-items:center; justify-content:center;
-  }
-  .wrap{display:flex;flex-direction:column;align-items:center;gap:18px;padding:32px 20px;text-align:center}
-  .glyph{
-    width:64px;height:64px;border-radius:18px;background:var(--accent);color:#fff;
-    display:flex;align-items:center;justify-content:center;font-size:30px;font-weight:700;
-    box-shadow:0 10px 24px rgba(176,122,40,.28);
-  }
-  h1{font-size:21px;font-weight:700;letter-spacing:.5px}
-  .slogan{font-size:13px;color:var(--ink-2);letter-spacing:2px}
-  .spin{
-    width:18px;height:18px;border-radius:50%;margin-top:6px;
-    border:2.5px solid var(--line);border-top-color:var(--accent);
-    animation:go .8s linear infinite;
-  }
-  .tip{font-size:12px;color:var(--ink-2)}
-  @keyframes go{to{transform:rotate(360deg)}}
-  .links{margin-top:14px;display:flex;flex-wrap:wrap;gap:8px 14px;justify-content:center;max-width:420px}
-  .links a{
-    font-size:12px;color:var(--accent);text-decoration:none;
-    padding:5px 12px;border:1px solid var(--line);border-radius:999px;background:var(--card);
-  }
-  .links a:hover{filter:brightness(.97)}
-  @media (prefers-reduced-motion:reduce){.spin{animation:none}}
-</style>
+<title>个人工作台 V2.0 — 不只是效率，也要有自己的风格</title>
+<meta name="description" content="你的个人数字工作空间。云同步 · 微信小程序 · AI助手。这次，不只是待办。">
 <link rel="manifest" href="manifest.json">
-<meta name="theme-color" content="#2f7d51">
+<meta name="theme-color" content="#0a1628">
 <meta name="mobile-web-app-capable" content="yes">
 <meta name="apple-mobile-web-app-capable" content="yes">
-<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
 <meta name="apple-mobile-web-app-title" content="工作台">
 <link rel="apple-touch-icon" href="icon-192.png">
+<style>
+/* ============================================================
+   TOKENS
+   ============================================================ */
+:root{
+  --brand:#3b82f6; --brand-2:#60a5fa; --brand-3:#2563eb;
+  --green:#10b981; --orange:#f59e0b; --red:#ef4444; --purple:#8b5cf6;
+  --dark-0:#0a1628; --dark-1:#0d1b2a; --dark-2:#102844; --dark-3:#1a2a4a;
+  --light-0:#f0f4f8; --light-1:#f8fafc; --light-2:#ffffff;
+  --ink:#1e293b; --ink-2:#64748b; --ink-3:#94a3b8;
+  --glass:rgba(255,255,255,.07); --glass-bd:rgba(255,255,255,.14);
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --kai:"Kaiti SC","STKaiti","KaiTi","楷体",cursive;
+}
+/* ============================================================
+   RESET
+   ============================================================ */
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:var(--font);background:var(--dark-0);color:#fff;overflow-x:hidden;line-height:1.6}
+a{color:inherit;text-decoration:none}
+svg{display:block}
+
+/* ============================================================
+   HERO
+   ============================================================ */
+.hero{
+  position:relative;min-height:100vh;display:flex;flex-direction:column;
+  align-items:center;justify-content:center;text-align:center;
+  background:radial-gradient(ellipse 90% 70% at 50% -10%,var(--dark-3) 0%,var(--dark-1) 45%,var(--dark-0) 100%);
+  overflow:hidden;
+}
+.stars{
+  position:absolute;inset:0;pointer-events:none;
+  background-image:
+    radial-gradient(1px 1px at 25px 35px,rgba(255,255,255,.9),transparent),
+    radial-gradient(1px 1px at 80px 120px,rgba(255,255,255,.6),transparent),
+    radial-gradient(2px 2px at 140px 60px,rgba(255,255,255,.8),transparent),
+    radial-gradient(1px 1px at 200px 180px,rgba(255,255,255,.5),transparent),
+    radial-gradient(1px 1px at 50px 250px,rgba(255,255,255,.7),transparent),
+    radial-gradient(2px 2px at 170px 300px,rgba(255,255,255,.4),transparent),
+    radial-gradient(1px 1px at 100px 90px,rgba(96,165,250,.8),transparent),
+    radial-gradient(1px 1px at 220px 40px,rgba(255,255,255,.9),transparent);
+  background-size:250px 350px;background-repeat:repeat;
+  animation:twinkle 4s ease-in-out infinite alternate;
+}
+@keyframes twinkle{0%{opacity:.6}100%{opacity:1}}
+.mountains{position:absolute;bottom:0;left:0;width:100%;height:auto;pointer-events:none;z-index:1}
+.hero-glow{
+  position:absolute;top:-20%;right:-10%;width:600px;height:600px;
+  background:radial-gradient(circle,rgba(59,130,246,.15) 0%,transparent 60%);
+  pointer-events:none;
+}
+.hero-content{position:relative;z-index:2;padding:0 24px;animation:fadeUp 1s ease both}
+.eyebrow{font-size:14px;color:var(--brand-2);letter-spacing:6px;margin-bottom:20px;font-weight:500}
+.hero h1{font-size:clamp(40px,7vw,72px);font-weight:800;letter-spacing:1px;line-height:1.15;margin-bottom:8px}
+.hero h1 .v{background:linear-gradient(135deg,var(--brand-2),var(--brand));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.hero h1 .dot{color:var(--brand-2);font-weight:400}
+.tags{font-size:15px;color:var(--ink-3);letter-spacing:3px;margin-top:16px}
+.tags b{color:var(--brand-2);font-weight:500}
+.slogan{font-family:var(--kai);font-size:clamp(18px,2.5vw,24px);color:#cbd5e1;margin-top:14px;letter-spacing:2px}
+.side-left,.side-right{position:absolute;z-index:2;font-size:13px;color:rgba(255,255,255,.35);letter-spacing:8px;writing-mode:vertical-rl;font-weight:300}
+.side-left{left:5vw;top:50%;transform:translateY(-50%)}
+.side-right{right:5vw;top:50%;transform:translateY(-50%);font-family:var(--kai);font-size:16px;letter-spacing:4px}
+.scroll-hint{position:absolute;bottom:40px;left:50%;transform:translateX(-50%);z-index:2;color:rgba(255,255,255,.4);font-size:12px;letter-spacing:2px;display:flex;flex-direction:column;align-items:center;gap:8px;animation:fadeUp 1s .8s ease both}
+.scroll-hint .arrow{width:1px;height:32px;background:linear-gradient(rgba(255,255,255,.4),transparent);animation:scrollPulse 2s ease-in-out infinite}
+@keyframes scrollPulse{0%,100%{opacity:.3;transform:scaleY(.8)}50%{opacity:1;transform:scaleY(1)}}
+
+/* ============================================================
+   SHOWCASE — device trio
+   ============================================================ */
+.showcase{
+  position:relative;background:var(--dark-0);padding:80px 24px 120px;
+  display:flex;justify-content:center;align-items:flex-start;gap:0;
+}
+.showcase .glow-l{position:absolute;left:5%;top:20%;width:400px;height:400px;background:radial-gradient(circle,rgba(139,92,246,.1) 0%,transparent 60%);pointer-events:none}
+.showcase .glow-r{position:absolute;right:5%;bottom:10%;width:500px;height:500px;background:radial-gradient(circle,rgba(59,130,246,.1) 0%,transparent 60%);pointer-events:none}
+.stage{position:relative;display:flex;align-items:center;justify-content:center;max-width:1100px;width:100%}
+
+/* --- AI Panel --- */
+.ai-panel{
+  position:absolute;left:-30px;bottom:20px;z-index:3;
+  width:260px;padding:20px;border-radius:18px;
+  background:var(--glass);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);
+  border:1px solid var(--glass-bd);
+  box-shadow:0 20px 60px rgba(0,0,0,.4);
+  animation:floatA 6s ease-in-out infinite;
+}
+.ai-head{display:flex;align-items:center;gap:10px;margin-bottom:14px}
+.ai-icon{width:36px;height:36px;border-radius:10px;background:linear-gradient(135deg,var(--purple),var(--brand));display:flex;align-items:center;justify-content:center}
+.ai-head b{font-size:15px;font-weight:600}
+.ai-head span{font-size:11px;color:var(--ink-3);display:block}
+.ai-btns{display:flex;flex-direction:column;gap:8px;margin-bottom:14px}
+.ai-btn{display:flex;align-items:center;gap:10px;padding:9px 12px;border-radius:10px;background:rgba(255,255,255,.05);border:1px solid rgba(255,255,255,.06);font-size:12px;color:#cbd5e1;transition:background .2s}
+.ai-btn:hover{background:rgba(255,255,255,.1)}
+.ai-btn .ic{width:28px;height:28px;border-radius:8px;display:flex;align-items:center;justify-content:center;flex-shrink:0}
+.ai-btn .ic.p{background:rgba(139,92,246,.2)}
+.ai-btn .ic.b{background:rgba(59,130,246,.2)}
+.ai-btn .ic.o{background:rgba(245,158,11,.2)}
+.ai-input{display:flex;align-items:center;gap:8px;padding:10px 14px;border-radius:12px;background:rgba(0,0,0,.3);border:1px solid rgba(255,255,255,.08);font-size:12px;color:var(--ink-3)}
+.ai-input .send{margin-left:auto;color:var(--brand-2)}
+
+/* --- MacBook --- */
+.macbook{position:relative;z-index:2;width:720px;filter:drop-shadow(0 40px 80px rgba(0,0,0,.5));animation:floatM 8s ease-in-out infinite}
+.mac-lid{background:linear-gradient(180deg,#e2e2e6,#c8c8cc);border-radius:14px 14px 4px 4px;padding:12px 12px 0;position:relative}
+.mac-bezel{background:#1a1a1a;border-radius:7px 7px 2px 2px;padding:6px;position:relative}
+.mac-cam{width:4px;height:4px;background:#444;border-radius:50%;position:absolute;top:4px;left:50%;transform:translateX(-50%);z-index:5}
+.mac-screen{border-radius:3px;overflow:hidden;background:var(--light-1);height:440px;position:relative}
+.mac-base{height:14px;background:linear-gradient(180deg,#d6d6da 0%,#9a9a9e 100%);border-radius:0 0 18px 18px;position:relative;margin:0 -16px;clip-path:polygon(2% 0,98% 0,100% 100%,0 100%)}
+.mac-base::after{content:'';position:absolute;top:0;left:50%;transform:translateX(-50%);width:100px;height:4px;background:rgba(0,0,0,.15);border-radius:0 0 6px 6px}
+
+/* --- Inner UI --- */
+.ui{display:flex;height:100%;font-size:11px;color:var(--ink);background:var(--light-1)}
+.ui-side{width:130px;background:var(--light-0);border-right:1px solid #e2e8f0;padding:10px 8px;flex-shrink:0;display:flex;flex-direction:column;gap:2px}
+.ui-logo{font-size:10px;font-weight:700;color:var(--ink);padding:4px 6px 8px;display:flex;align-items:center;gap:5px}
+.ui-logo .lg{width:18px;height:18px;border-radius:5px;background:linear-gradient(135deg,var(--brand),var(--brand-3));display:flex;align-items:center;justify-content:center;color:#fff;font-size:9px;font-weight:700}
+.ui-nav{display:flex;flex-direction:column;gap:1px}
+.nav-item{display:flex;align-items:center;gap:7px;padding:5px 6px;border-radius:6px;font-size:10px;color:var(--ink-2);transition:all .15s}
+.nav-item .ni{width:14px;height:14px;flex-shrink:0;opacity:.6}
+.nav-item.active{background:var(--brand);color:#fff}
+.nav-item.active .ni{opacity:1}
+.nav-item:not(.active):hover{background:#e8eef5}
+.ui-main{flex:1;padding:10px 12px;overflow:hidden;display:flex;flex-direction:column;gap:8px;min-width:0}
+.ui-topbar{display:flex;align-items:center;gap:8px}
+.ui-search{flex:1;padding:5px 10px;background:var(--light-0);border:1px solid #e2e8f0;border-radius:8px;font-size:10px;color:var(--ink-3)}
+.ui-user{width:24px;height:24px;border-radius:50%;background:linear-gradient(135deg,var(--brand-2),var(--brand-3));color:#fff;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:600}
+.ui-welcome{background:linear-gradient(135deg,#eff6ff,#dbeafe);border-radius:10px;padding:8px 12px;display:flex;flex-direction:column;gap:2px}
+.ui-welcome b{font-size:12px;color:var(--ink)}
+.ui-welcome span{font-size:9px;color:var(--ink-2)}
+.ui-stats{display:grid;grid-template-columns:repeat(4,1fr);gap:6px}
+.stat{background:#fff;border:1px solid #e2e8f0;border-radius:8px;padding:6px 7px;display:flex;flex-direction:column;gap:1px}
+.stat b{font-size:16px;font-weight:700;line-height:1}
+.stat span{font-size:8px;color:var(--ink-2)}
+.stat i{font-size:8px;font-style:normal;font-weight:600}
+.stat:nth-child(1) b{color:var(--brand)} .stat:nth-child(1) i{color:var(--green)}
+.stat:nth-child(2) b{color:var(--red)} .stat:nth-child(2) i{color:var(--red)}
+.stat:nth-child(3) b{color:var(--green)} .stat:nth-child(3) i{color:var(--green)}
+.stat:nth-child(4) b{color:var(--purple)} .stat:nth-child(4) i{color:var(--green)}
+.ui-tasks{flex:1;display:flex;flex-direction:column;gap:6px;min-height:0}
+.task-tabs{display:flex;align-items:center;gap:6px}
+.tab{font-size:9px;color:var(--ink-2);padding:3px 8px;border-radius:6px}
+.tab.active{background:var(--brand);color:#fff}
+.tab-add{margin-left:auto;font-size:9px;color:var(--brand);font-weight:600;padding:3px 8px;border:1px solid var(--brand);border-radius:6px}
+.task-list{display:flex;flex-direction:column;gap:3px;overflow:hidden}
+.task{display:flex;align-items:center;gap:6px;padding:4px 6px;border-radius:6px;font-size:9px;color:var(--ink);background:#fff;border:1px solid #f1f5f9}
+.task .dot{width:6px;height:6px;border-radius:50%;flex-shrink:0}
+.task .dot.red{background:var(--red)} .task .dot.orange{background:var(--orange)} .task .dot.blue{background:var(--brand)} .task .dot.green{background:var(--green)}
+.task .time{margin-left:auto;color:var(--ink-3);font-size:8px}
+.task.done{opacity:.5;text-decoration:line-through}
+.ui-right{width:150px;background:var(--light-0);border-left:1px solid #e2e8f0;padding:10px 8px;flex-shrink:0;display:flex;flex-direction:column;gap:8px}
+.ui-cal b{font-size:10px;color:var(--ink);display:block;margin-bottom:4px}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:1px}
+.cal-cell{height:14px;display:flex;align-items:center;justify-content:center;font-size:7px;color:var(--ink-3);border-radius:3px}
+.cal-cell.today{background:var(--brand);color:#fff;font-weight:600}
+.cal-cell.muted{opacity:.3}
+.ui-remind b{font-size:10px;color:var(--ink);display:block;margin-bottom:4px}
+.remind-item{font-size:8px;color:var(--ink-2);padding:3px 0;border-bottom:1px solid #e2e8f0;display:flex;gap:4px;align-items:center}
+.remind-item span{color:var(--brand);font-weight:600;flex-shrink:0}
+
+/* --- Phone --- */
+.phone{position:absolute;right:-20px;bottom:0;z-index:3;width:180px;background:#1a1a1a;border-radius:26px;padding:6px;box-shadow:0 30px 60px rgba(0,0,0,.5);animation:floatP 7s ease-in-out infinite}
+.phone-screen{border-radius:20px;overflow:hidden;background:var(--light-0);height:360px;position:relative}
+.phone-notch{width:50px;height:14px;background:#1a1a1a;border-radius:0 0 10px 10px;position:absolute;top:0;left:50%;transform:translateX(-50%);z-index:10}
+.ph-status{display:flex;justify-content:space-between;padding:6px 16px 2px;font-size:8px;font-weight:600;color:var(--ink);padding-top:14px}
+.ph-welcome{margin:4px 10px 0;padding:10px 12px;background:linear-gradient(135deg,var(--brand),var(--brand-3));border-radius:12px;color:#fff}
+.ph-welcome b{font-size:11px;display:block}
+.ph-welcome span{font-size:8px;opacity:.8}
+.ph-quick{display:grid;grid-template-columns:repeat(4,1fr);gap:4px;padding:8px 10px}
+.ph-qi{display:flex;flex-direction:column;align-items:center;gap:3px;font-size:7px;color:var(--ink-2)}
+.ph-qi .ic{width:28px;height:28px;border-radius:8px;background:#fff;display:flex;align-items:center;justify-content:center;box-shadow:0 2px 6px rgba(0,0,0,.06)}
+.ph-tasks{padding:0 10px}
+.ph-tasks .hd{display:flex;justify-content:space-between;align-items:center;font-size:9px;font-weight:600;margin-bottom:4px}
+.ph-tasks .hd span{font-size:7px;color:var(--brand);font-weight:400}
+.ph-task{display:flex;align-items:center;gap:5px;padding:4px 6px;background:#fff;border-radius:6px;margin-bottom:3px;font-size:8px;color:var(--ink);box-shadow:0 1px 3px rgba(0,0,0,.04)}
+.ph-task .dot{width:5px;height:5px;border-radius:50%;flex-shrink:0}
+.ph-tab{position:absolute;bottom:0;left:0;right:0;height:36px;background:#fff;border-top:1px solid #e2e8f0;display:flex;justify-content:space-around;align-items:center;padding-bottom:4px}
+.ph-tab .ti{display:flex;flex-direction:column;align-items:center;gap:1px;font-size:6px;color:var(--ink-3)}
+.ph-tab .ti.active{color:var(--brand)}
+.ph-tab .ti .fab{width:28px;height:28px;border-radius:50%;background:var(--brand);color:#fff;display:flex;align-items:center;justify-content:center;font-size:14px}
+
+/* ============================================================
+   THEME SECTION
+   ============================================================ */
+.themes{position:relative;background:radial-gradient(ellipse 80% 60% at 50% 100%,var(--dark-3) 0%,var(--dark-0) 70%);padding:100px 24px 120px;text-align:center;overflow:hidden}
+.themes .stars{opacity:.5}
+.themes h2{font-size:clamp(28px,4.5vw,44px);font-weight:800;letter-spacing:1px;position:relative;z-index:2}
+.themes h2 .g{background:linear-gradient(135deg,var(--brand-2),var(--purple));-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.themes .sub{font-size:15px;color:var(--ink-3);margin-top:12px;position:relative;z-index:2}
+.theme-row{display:flex;justify-content:center;gap:32px;margin-top:56px;flex-wrap:wrap;position:relative;z-index:2}
+.theme-card{width:280px;text-align:center;animation:fadeUp .8s ease both}
+.theme-card:nth-child(2){animation-delay:.15s}
+.theme-card:nth-child(3){animation-delay:.3s}
+.theme-mock{border-radius:12px;overflow:hidden;box-shadow:0 20px 50px rgba(0,0,0,.4);border:1px solid rgba(255,255,255,.1);transition:transform .3s,box-shadow .3s}
+.theme-card:hover .theme-mock{transform:translateY(-8px);box-shadow:0 30px 70px rgba(0,0,0,.5)}
+.theme-mock .bar{height:28px;display:flex;align-items:center;gap:6px;padding:0 12px}
+.theme-mock .bar i{width:8px;height:8px;border-radius:50%}
+.theme-mock .body{height:160px;display:flex}
+.theme-mock .sb{width:56px;padding:8px 6px;display:flex;flex-direction:column;gap:4px}
+.theme-mock .sb .logo{height:14px;border-radius:4px;margin-bottom:4px}
+.theme-mock .sb .ln{height:8px;border-radius:3px;opacity:.5}
+.theme-mock .sb .ln.act{opacity:1}
+.theme-mock .ct{flex:1;padding:8px;display:flex;flex-direction:column;gap:5px}
+.theme-mock .ct .ban{height:28px;border-radius:6px}
+.theme-mock .ct .cards{display:grid;grid-template-columns:1fr 1fr;gap:4px}
+.theme-mock .ct .cards .c{height:28px;border-radius:5px}
+.theme-mock .ct .list{display:flex;flex-direction:column;gap:3px;margin-top:2px}
+.theme-mock .ct .list .l{height:10px;border-radius:3px;opacity:.6}
+.theme-label{margin-top:16px;font-size:15px;font-weight:600}
+.theme-desc{font-size:12px;color:var(--ink-3);margin-top:4px}
+.theme-dots{display:flex;justify-content:center;gap:6px;margin-top:10px}
+.theme-dots i{width:10px;height:10px;border-radius:50%;border:2px solid rgba(255,255,255,.2);cursor:pointer}
+.theme-dots i.act{border-color:var(--brand-2);box-shadow:0 0 8px var(--brand-2)}
+
+/* Theme: Light */
+.t-light .bar{background:#f1f5f9} .t-light .bar i:nth-child(1){background:#ff5f57} .t-light .bar i:nth-child(2){background:#febc2e} .t-light .bar i:nth-child(3){background:#28c840}
+.t-light .body{background:#fff} .t-light .sb{background:#f8fafc} .t-light .sb .logo{background:linear-gradient(135deg,var(--brand),var(--brand-3))} .t-light .sb .ln{background:#cbd5e1} .t-light .sb .ln.act{background:var(--brand)}
+.t-light .ct{background:#fff} .t-light .ct .ban{background:linear-gradient(135deg,#eff6ff,#dbeafe)} .t-light .ct .cards .c{background:#f1f5f9;border:1px solid #e2e8f0} .t-light .ct .list .l{background:#f1f5f9}
+
+/* Theme: Dark */
+.t-dark .bar{background:#1e1e2e} .t-dark .bar i:nth-child(1){background:#ff5f57} .t-dark .bar i:nth-child(2){background:#febc2e} .t-dark .bar i:nth-child(3){background:#28c840}
+.t-dark .body{background:#1a1a2e} .t-dark .sb{background:#16162a} .t-dark .sb .logo{background:linear-gradient(135deg,var(--brand-2),var(--brand))} .t-dark .sb .ln{background:#3a3a5c} .t-dark .sb .ln.act{background:var(--brand)}
+.t-dark .ct{background:#1a1a2e} .t-dark .ct .ban{background:linear-gradient(135deg,#2a2a4e,#1e3a5f)} .t-dark .ct .cards .c{background:#252540} .t-dark .ct .list .l{background:#252540}
+
+/* Theme: Blue */
+.t-blue .bar{background:#0f172a} .t-blue .bar i:nth-child(1){background:#ff5f57} .t-blue .bar i:nth-child(2){background:#febc2e} .t-blue .bar i:nth-child(3){background:#28c840}
+.t-blue .body{background:#0f172a} .t-blue .sb{background:#0a0f1e} .t-blue .sb .logo{background:linear-gradient(135deg,#38bdf8,#0ea5e9)} .t-blue .sb .ln{background:#1e3a5f} .t-blue .sb .ln.act{background:#0ea5e9}
+.t-blue .ct{background:#0f172a} .t-blue .ct .ban{background:linear-gradient(135deg,#1e3a5f,#0f172a)} .t-blue .ct .cards .c{background:#1e3a5f} .t-blue .ct .list .l{background:#172554}
+
+/* ============================================================
+   FEATURES BENTO
+   ============================================================ */
+.features{background:var(--light-0);padding:100px 24px 80px}
+.features .hd{text-align:center;margin-bottom:56px}
+.features .hd h2{font-size:clamp(26px,4vw,38px);font-weight:800;color:var(--ink);letter-spacing:1px}
+.features .hd p{font-size:15px;color:var(--ink-2);margin-top:10px}
+.bento{max-width:960px;margin:0 auto;display:grid;grid-template-columns:repeat(3,1fr);gap:20px}
+.bento .card{background:#fff;border-radius:16px;padding:28px;box-shadow:0 4px 20px rgba(0,0,0,.04);border:1px solid #e8eef5;transition:transform .3s,box-shadow .3s}
+.bento .card:hover{transform:translateY(-4px);box-shadow:0 12px 40px rgba(0,0,0,.08)}
+.bento .card .ic{width:48px;height:48px;border-radius:12px;display:flex;align-items:center;justify-content:center;margin-bottom:16px}
+.bento .card h3{font-size:17px;font-weight:700;color:var(--ink);margin-bottom:6px}
+.bento .card p{font-size:13px;color:var(--ink-2);line-height:1.6}
+.bento .big{grid-column:span 2}
+.bento .card.sync .ic{background:rgba(59,130,246,.1)}
+.bento .card.mini .ic{background:rgba(16,185,129,.1)}
+.bento .card.ai .ic{background:rgba(139,92,246,.1)}
+.bento .card.dark .ic{background:rgba(15,23,42,.08)}
+.bento .card.theme .ic{background:rgba(245,158,11,.1)}
+.bento .card.color .ic{background:rgba(236,72,153,.1)}
+
+/* ============================================================
+   CTA
+   ============================================================ */
+.cta{position:relative;background:linear-gradient(180deg,var(--light-0) 0%,var(--dark-1) 60%,var(--dark-0) 100%);padding:100px 24px 120px;text-align:center;overflow:hidden}
+.cta .glow{position:absolute;top:50%;left:50%;transform:translate(-50%,-50%);width:600px;height:300px;background:radial-gradient(ellipse,rgba(59,130,246,.12) 0%,transparent 60%);pointer-events:none}
+.cta-quote{font-family:var(--kai);font-size:clamp(20px,3vw,28px);color:#cbd5e1;position:relative;z-index:2;letter-spacing:2px}
+.cta-sub{font-size:14px;color:var(--ink-3);margin-top:12px;position:relative;z-index:2;letter-spacing:1px}
+.cta-btns{display:flex;justify-content:center;gap:16px;margin-top:36px;position:relative;z-index:2;flex-wrap:wrap}
+.btn-enter{display:inline-flex;align-items:center;gap:8px;padding:14px 36px;background:linear-gradient(135deg,var(--brand),var(--brand-3));color:#fff;font-size:16px;font-weight:600;border-radius:999px;box-shadow:0 8px 30px rgba(59,130,246,.4);transition:transform .2s,box-shadow .2s}
+.btn-enter:hover{transform:translateY(-2px);box-shadow:0 12px 40px rgba(59,130,246,.5)}
+.btn-mobile{display:inline-flex;align-items:center;gap:8px;padding:14px 28px;background:rgba(255,255,255,.08);color:#fff;font-size:14px;font-weight:500;border-radius:999px;border:1px solid var(--glass-bd);backdrop-filter:blur(10px);transition:background .2s}
+.btn-mobile:hover{background:rgba(255,255,255,.14)}
+.cta-foot{font-size:12px;color:rgba(255,255,255,.3);margin-top:40px;position:relative;z-index:2;letter-spacing:1px}
+
+/* ============================================================
+   ANIMATIONS
+   ============================================================ */
+@keyframes fadeUp{from{opacity:0;transform:translateY(30px)}to{opacity:1;transform:translateY(0)}}
+@keyframes floatM{0%,100%{transform:translateY(0)}50%{transform:translateY(-12px)}}
+@keyframes floatA{0%,100%{transform:translateY(0)}50%{transform:translateY(-8px)}}
+@keyframes floatP{0%,100%{transform:translateY(0)}50%{transform:translateY(-10px)}}
+.reveal{opacity:0;transform:translateY(40px);transition:opacity .8s ease,transform .8s ease}
+.reveal.in{opacity:1;transform:translateY(0)}
+@media(prefers-reduced-motion:reduce){*{animation:none!important;transition:none!important}.reveal{opacity:1;transform:none}}
+
+/* ============================================================
+   RESPONSIVE
+   ============================================================ */
+@media(max-width:1000px){
+  .side-left,.side-right{display:none}
+  .macbook{width:560px}
+  .mac-screen{height:360px}
+  .ai-panel{width:220px;left:-10px}
+  .phone{width:150px;right:-5px}
+  .phone-screen{height:300px}
+  .theme-row{gap:20px}
+  .theme-card{width:240px}
+}
+@media(max-width:760px){
+  .showcase{padding:60px 16px 80px}
+  .stage{flex-direction:column;gap:24px}
+  .ai-panel{position:relative;left:auto;bottom:auto;width:100%;max-width:340px}
+  .macbook{width:100%;max-width:480px}
+  .mac-screen{height:300px}
+  .phone{position:relative;right:auto;bottom:auto;width:160px}
+  .phone-screen{height:320px}
+  .bento{grid-template-columns:1fr}
+  .bento .big{grid-column:span 1}
+  .theme-row{flex-direction:column;align-items:center}
+  .theme-card{width:100%;max-width:300px}
+  .features,.cta,.themes{padding:60px 16px}
+}
+@media(max-width:480px){
+  .hero h1{font-size:36px}
+  .tags{font-size:12px;letter-spacing:1px}
+  .macbook{max-width:100%}
+  .mac-screen{height:260px}
+  .ui-side{width:90px}
+  .ui-right{display:none}
+}
+</style>
 </head>
 <body>
-<div class="wrap">
-  <div class="glyph">S</div>
-  <h1>Song 的工作台</h1>
-  <div class="slogan">计划 · 专注 · 记录 · 成长</div>
-  <div class="spin" aria-hidden="true"></div>
-  <div class="tip">正在进入…</div>
-  <div class="links">
-    <a href="workbench.html">电脑版</a>
-    <a href="workbench-m.html">手机版</a>
+
+<!-- ============================================================
+     HERO
+     ============================================================ -->
+<section class="hero">
+  <div class="stars"></div>
+  <div class="hero-glow"></div>
+  <svg class="mountains" viewBox="0 0 1440 320" preserveAspectRatio="none" aria-hidden="true">
+    <polygon fill="#0d1b2a" points="0,320 0,180 160,100 320,160 480,80 640,170 800,90 960,160 1120,80 1280,150 1440,90 1440,320"/>
+    <polygon fill="#102844" points="0,320 0,240 240,160 440,220 640,170 840,240 1040,190 1240,230 1440,180 1440,320"/>
+    <polygon fill="#0a1628" points="0,320 0,280 360,220 720,270 1080,230 1440,270 1440,320"/>
+  </svg>
+  <div class="side-left">更专注 · 更高效 · 更从容</div>
+  <div class="side-right">遇见更好的自己</div>
+  <div class="hero-content">
+    <p class="eyebrow">你的个人数字工作空间</p>
+    <h1>个人工作台 <span class="v">V2.0</span></h1>
+    <p class="tags"><b>云同步</b> · <b>微信小程序</b> · <b>AI助手</b></p>
+    <p class="slogan">这次，不只是待办。</p>
   </div>
-</div>
+  <div class="scroll-hint">
+    <span>向下探索</span>
+    <div class="arrow"></div>
+  </div>
+</section>
+
+<!-- ============================================================
+     SHOWCASE — MacBook + AI Panel + Phone
+     ============================================================ -->
+<section class="showcase">
+  <div class="glow-l"></div>
+  <div class="glow-r"></div>
+  <div class="stage">
+
+    <!-- AI Assistant Panel -->
+    <div class="ai-panel">
+      <div class="ai-head">
+        <div class="ai-icon">
+          <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L13.5 6.5L18 8L13.5 9.5L12 14L10.5 9.5L6 8L10.5 6.5z"/><path d="M5 15L5.8 17.2L8 18L5.8 18.8L5 21L4.2 18.8L2 18L4.2 17.2z"/><path d="M19 14L19.8 16.2L22 17L19.8 17.8L19 20L18.2 17.8L16 17L18.2 16.2z"/></svg>
+        </div>
+        <div><b>AI 助手</b><span>智能总结你的工作</span></div>
+      </div>
+      <div class="ai-btns">
+        <div class="ai-btn"><div class="ic p"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#a78bfa" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>帮我梳理今天的工作重点</div>
+        <div class="ai-btn"><div class="ic b"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#60a5fa" stroke-width="2"><path d="M14 2H6a2 2 0 00-2 2v16a2 2 0 002 2h12a2 2 0 002-2V8z"/><path d="M14 2v6h6M16 13H8M16 17H8M10 9H8"/></svg></div>生成本周工作总结</div>
+        <div class="ai-btn"><div class="ic o"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#fbbf24" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>根据会议纪要创建待办</div>
+      </div>
+      <div class="ai-input">有什么可以帮你的？<span class="send">↑</span></div>
+    </div>
+
+    <!-- MacBook -->
+    <div class="macbook">
+      <div class="mac-lid">
+        <div class="mac-bezel">
+          <div class="mac-cam"></div>
+          <div class="mac-screen">
+            <div class="ui">
+              <!-- Sidebar -->
+              <div class="ui-side">
+                <div class="ui-logo"><div class="lg">W</div>工作台</div>
+                <div class="ui-nav">
+                  <div class="nav-item"><svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/></svg>总览</div>
+                  <div class="nav-item active"><svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="16" y1="2" x2="16" y2="6"/><line x1="8" y1="2" x2="8" y2="6"/><line x1="3" y1="10" x2="21" y2="10"/></svg>今日</div>
+                  <div class="nav-item"><svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg>事项</div>
+                  <div class="nav-item"><svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg>项目</div>
+                  <div class="nav-item"><svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/><line x1="3" y1="10" x2="21" y2="10"/></svg>日历</div>
+                  <div class="nav-item"><svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 8A6 6 0 006 8c0 7-3 9-3 9h18s-3-2-3-9"/><path d="M13.7 21a2 2 0 01-3.4 0"/></svg>提醒</div>
+                  <div class="nav-item"><svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19.5A2.5 2.5 0 016.5 17H20"/><path d="M6.5 2H20v20H6.5A2.5 2.5 0 014 19.5v-15A2.5 2.5 0 016.5 2z"/></svg>资料</div>
+                  <div class="nav-item"><svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M18 10h1a3 3 0 010 6h-1M2 10h16v8a4 4 0 01-4 4H6a4 4 0 01-4-4z"/><path d="M6 10V6a3 3 0 013-3h7"/></svg>云同步</div>
+                  <div class="nav-item"><svg class="ni" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L13.5 6.5L18 8L13.5 9.5L12 14L10.5 9.5L6 8L10.5 6.5z"/></svg>AI助手</div>
+                </div>
+              </div>
+              <!-- Main -->
+              <div class="ui-main">
+                <div class="ui-topbar">
+                  <div class="ui-search">搜索事项、项目、联系人或资料…</div>
+                  <div class="ui-user">张</div>
+                </div>
+                <div class="ui-welcome">
+                  <b>早上好！今天也要高效工作</b>
+                  <span>用专注和行动，遇见更好的自己。</span>
+                </div>
+                <div class="ui-stats">
+                  <div class="stat"><b>8</b><span>待办事项</span><i>较昨日 -2</i></div>
+                  <div class="stat"><b>3</b><span>重要事项</span><i>较昨日 +1</i></div>
+                  <div class="stat"><b>12</b><span>已完成</span><i>较昨日 +4</i></div>
+                  <div class="stat"><b>2.5h</b><span>专注时长</span><i>较昨日 +0.8h</i></div>
+                </div>
+                <div class="ui-tasks">
+                  <div class="task-tabs">
+                    <span class="tab active">全部 8</span>
+                    <span class="tab">待完成 5</span>
+                    <span class="tab">已完成 3</span>
+                    <span class="tab-add">+ 新建任务</span>
+                  </div>
+                  <div class="task-list">
+                    <div class="task"><i class="dot red"></i>完成产品方案评审文档<span class="time">10:00</span></div>
+                    <div class="task"><i class="dot orange"></i>整理Q3运营数据报告<span class="time">14:00</span></div>
+                    <div class="task"><i class="dot orange"></i>与客户沟通新功能需求<span class="time">15:30</span></div>
+                    <div class="task"><i class="dot blue"></i>阅读行业最新动态<span class="time">18:00</span></div>
+                    <div class="task done"><i class="dot green"></i>回复重要邮件<span class="time">09:30</span></div>
+                  </div>
+                </div>
+              </div>
+              <!-- Right -->
+              <div class="ui-right">
+                <div class="ui-cal">
+                  <b>2024年10月</b>
+                  <div class="cal-grid">
+                    <div class="cal-cell muted">30</div><div class="cal-cell">1</div><div class="cal-cell">2</div><div class="cal-cell">3</div><div class="cal-cell">4</div><div class="cal-cell">5</div><div class="cal-cell">6</div>
+                    <div class="cal-cell">7</div><div class="cal-cell">8</div><div class="cal-cell">9</div><div class="cal-cell">10</div><div class="cal-cell">11</div><div class="cal-cell">12</div><div class="cal-cell">13</div>
+                    <div class="cal-cell">14</div><div class="cal-cell">15</div><div class="cal-cell">16</div><div class="cal-cell">17</div><div class="cal-cell">18</div><div class="cal-cell">19</div><div class="cal-cell">20</div>
+                    <div class="cal-cell">21</div><div class="cal-cell">22</div><div class="cal-cell">23</div><div class="cal-cell today">24</div><div class="cal-cell">25</div><div class="cal-cell">26</div><div class="cal-cell">27</div>
+                    <div class="cal-cell">28</div><div class="cal-cell">29</div><div class="cal-cell">30</div><div class="cal-cell">31</div><div class="cal-cell muted">1</div><div class="cal-cell muted">2</div><div class="cal-cell muted">3</div>
+                  </div>
+                </div>
+                <div class="ui-remind">
+                  <b>今日提醒 3</b>
+                  <div class="remind-item"><span>10:00</span>产品方案评审</div>
+                  <div class="remind-item"><span>14:00</span>提交运营数据</div>
+                  <div class="remind-item"><span>15:30</span>客户需求沟通</div>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      </div>
+      <div class="mac-base"></div>
+    </div>
+
+    <!-- Phone -->
+    <div class="phone">
+      <div class="phone-screen">
+        <div class="phone-notch"></div>
+        <div class="ph-status"><span>9:41</span><span>● ● ●</span></div>
+        <div class="ph-welcome">
+          <b>专注当下</b>
+          <span>遇见更好的自己</span>
+        </div>
+        <div class="ph-quick">
+          <div class="ph-qi"><div class="ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2"><path d="M9 11l3 3L22 4"/><path d="M21 12v7a2 2 0 01-2 2H5a2 2 0 01-2-2V5a2 2 0 012-2h11"/></svg></div>待办</div>
+          <div class="ph-qi"><div class="ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/></svg></div>日历</div>
+          <div class="ph-qi"><div class="ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2"><path d="M22 19a2 2 0 01-2 2H4a2 2 0 01-2-2V5a2 2 0 012-2h5l2 3h9a2 2 0 012 2z"/></svg></div>项目</div>
+          <div class="ph-qi"><div class="ic"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2"><path d="M12 2L13.5 6.5L18 8L13.5 9.5L12 14L10.5 9.5L6 8L10.5 6.5z"/></svg></div>AI</div>
+        </div>
+        <div class="ph-tasks">
+          <div class="hd">今日任务 <span>查看全部</span></div>
+          <div class="ph-task"><i class="dot" style="background:#ef4444"></i>完成产品方案评审</div>
+          <div class="ph-task"><i class="dot" style="background:#f59e0b"></i>整理Q3运营数据</div>
+          <div class="ph-task"><i class="dot" style="background:#f59e0b"></i>客户需求沟通</div>
+        </div>
+        <div class="ph-tab">
+          <div class="ti active"><svg width="14" height="14" viewBox="0 0 24 24" fill="currentColor"><path d="M3 12l9-9 9 9v9a2 2 0 01-2 2h-4v-7h-6v7H5a2 2 0 01-2-2z"/></svg>首页</div>
+          <div class="ti"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2"/></svg>日历</div>
+          <div class="ti"><div class="fab">+</div></div>
+          <div class="ti"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 2L13.5 6.5L18 8L13.5 9.5L12 14L10.5 9.5L6 8L10.5 6.5z"/></svg>AI</div>
+          <div class="ti"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="8" r="4"/><path d="M4 20c0-4 4-6 8-6s8 2 8 6"/></svg>我的</div>
+        </div>
+      </div>
+    </div>
+
+  </div>
+</section>
+
+<!-- ============================================================
+     THEME SHOWCASE
+     ============================================================ -->
+<section class="themes">
+  <div class="stars"></div>
+  <h2 class="reveal">不只是效率，也要有自己的<span class="g">风格</span></h2>
+  <p class="sub reveal">浅色、深色、科技蓝主题，让工作界面更耐看。</p>
+  <div class="theme-row">
+    <!-- Light -->
+    <div class="theme-card reveal">
+      <div class="theme-mock t-light">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <div class="body">
+          <div class="sb"><div class="logo"></div><div class="ln act"></div><div class="ln"></div><div class="ln"></div><div class="ln"></div><div class="ln"></div></div>
+          <div class="ct"><div class="ban"></div><div class="cards"><div class="c"></div><div class="c"></div></div><div class="list"><div class="l"></div><div class="l"></div><div class="l"></div></div></div>
+        </div>
+      </div>
+      <div class="theme-label">Apple Light</div>
+      <div class="theme-desc">明亮清爽 · 日间专注</div>
+      <div class="theme-dots"><i class="act" style="background:#3b82f6"></i><i style="background:#10b981"></i><i style="background:#f59e0b"></i><i style="background:#8b5cf6"></i></div>
+    </div>
+    <!-- Dark -->
+    <div class="theme-card reveal">
+      <div class="theme-mock t-dark">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <div class="body">
+          <div class="sb"><div class="logo"></div><div class="ln act"></div><div class="ln"></div><div class="ln"></div><div class="ln"></div><div class="ln"></div></div>
+          <div class="ct"><div class="ban"></div><div class="cards"><div class="c"></div><div class="c"></div></div><div class="list"><div class="l"></div><div class="l"></div><div class="l"></div></div></div>
+        </div>
+      </div>
+      <div class="theme-label">Dark Pro</div>
+      <div class="theme-desc">深邃护眼 · 夜间沉浸</div>
+      <div class="theme-dots"><i class="act" style="background:#60a5fa"></i><i style="background:#a78bfa"></i><i style="background:#34d399"></i><i style="background:#fbbf24"></i></div>
+    </div>
+    <!-- Blue -->
+    <div class="theme-card reveal">
+      <div class="theme-mock t-blue">
+        <div class="bar"><i></i><i></i><i></i></div>
+        <div class="body">
+          <div class="sb"><div class="logo"></div><div class="ln act"></div><div class="ln"></div><div class="ln"></div><div class="ln"></div><div class="ln"></div></div>
+          <div class="ct"><div class="ban"></div><div class="cards"><div class="c"></div><div class="c"></div></div><div class="list"><div class="l"></div><div class="l"></div><div class="l"></div></div></div>
+        </div>
+      </div>
+      <div class="theme-label">Space Blue</div>
+      <div class="theme-desc">科技深蓝 · 极客专属</div>
+      <div class="theme-dots"><i class="act" style="background:#0ea5e9"></i><i style="background:#38bdf8"></i><i style="background:#818cf8"></i><i style="background:#2dd4bf"></i></div>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     FEATURES BENTO
+     ============================================================ -->
+<section class="features">
+  <div class="hd reveal">
+    <h2>为高效而设计</h2>
+    <p>每一个功能都经过精心打磨，让日常使用成为一种享受</p>
+  </div>
+  <div class="bento">
+    <div class="card sync big reveal">
+      <div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#3b82f6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M18 10h1a3 3 0 010 6h-1M2 10h16v8a4 4 0 01-4 4H6a4 4 0 01-4-4z"/><path d="M6 10V6a3 3 0 013-3h7"/><path d="M12 2v4M10 4l2-2 2 2" transform="translate(0 -1)"/></svg></div>
+      <h3>云同步</h3>
+      <p>多端实时同步，数据安全可靠。在电脑上记录，在手机上查看，无缝衔接每一个工作场景。</p>
+    </div>
+    <div class="card mini reveal">
+      <div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#10b981" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 11.5a8.38 8.38 0 01-.9 3.8 8.5 8.5 0 01-7.6 4.7 8.38 8.38 0 01-3.8-.9L3 21l1.9-5.7a8.38 8.38 0 01-.9-3.8 8.5 8.5 0 014.7-7.6 8.38 8.38 0 013.8-.9h.5a8.48 8.48 0 018 8v.5z"/></svg></div>
+      <h3>微信小程序</h3>
+      <p>随时随地，高效处理工作</p>
+    </div>
+    <div class="card ai reveal">
+      <div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#8b5cf6" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2L13.5 6.5L18 8L13.5 9.5L12 14L10.5 9.5L6 8L10.5 6.5z"/><path d="M5 15L5.8 17.2L8 18L5.8 18.8L5 21L4.2 18.8L2 18L4.2 17.2z"/><path d="M19 14L19.8 16.2L22 17L19.8 17.8L19 20L18.2 17.8L16 17L18.2 16.2z"/></svg></div>
+      <h3>AI 助手</h3>
+      <p>智能规划，让工作更轻松</p>
+    </div>
+    <div class="card dark reveal">
+      <div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#1e293b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12.79A9 9 0 1111.21 3 7 7 0 0021 12.79z"/></svg></div>
+      <h3>深色模式</h3>
+      <p>舒适护眼，专注更持久</p>
+    </div>
+    <div class="card theme reveal">
+      <div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#f59e0b" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="13.5" cy="6.5" r=".5" fill="#f59e0b"/><circle cx="17.5" cy="10.5" r=".5" fill="#f59e0b"/><circle cx="8.5" cy="7.5" r=".5" fill="#f59e0b"/><circle cx="6.5" cy="12.5" r=".5" fill="#f59e0b"/><path d="M12 2C6.5 2 2 6.5 2 12s4.5 10 10 10c.926 0 1.648-.746 1.648-1.688 0-.437-.18-.835-.437-1.125-.29-.289-.438-.652-.438-1.125a1.64 1.64 0 011.668-1.668h1.996c3.05 0 5.55-2.5 5.55-5.55C21.965 6.012 17.461 2 12 2z"/></svg></div>
+      <h3>主题中心</h3>
+      <p>多种精美主题一键切换</p>
+    </div>
+    <div class="card color big reveal">
+      <div class="ic"><svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="#ec4899" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M2 17.5a7.5 7.5 0 0115 0M9 3a3 3 0 100 6 3 3 0 000-6z" transform="translate(3 1)"/><path d="M13 13l8-8M19 5l2 2M17 7l-2-2"/></svg></div>
+      <h3>自定义强调色</h3>
+      <p>用你喜欢的颜色打造专属工作台，让每一次打开都有好心情。高效与美感兼得，每天都有好心情。</p>
+    </div>
+  </div>
+</section>
+
+<!-- ============================================================
+     CTA
+     ============================================================ -->
+<section class="cta">
+  <div class="glow"></div>
+  <p class="cta-quote reveal">把每天都要打开的软件，做得更喜欢一点。</p>
+  <p class="cta-sub reveal">专注 · 有序 · 持续进步 · Better Everyday</p>
+  <div class="cta-btns reveal">
+    <a href="workbench.html" class="btn-enter">
+      进入工作台
+      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><line x1="5" y1="12" x2="19" y2="12"/><polyline points="12 5 19 12 12 19"/></svg>
+    </a>
+    <a href="workbench-m.html" class="btn-mobile">
+      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><rect x="5" y="2" width="14" height="20" rx="2"/><line x1="12" y1="18" x2="12" y2="18"/></svg>
+      手机版
+    </a>
+  </div>
+  <p class="cta-foot">个人工作台 V2.0 · Made with care</p>
+</section>
+
+<!-- ============================================================
+     SCRIPTS
+     ============================================================ -->
 <script>
+// Scroll reveal
 (function(){
-  var saved=null; try{ saved=localStorage.getItem("workbench-entry"); }catch(e){}
-  // v1.7 主题合并迁移：旧入口指向已删除的 4×2 主题文件 → 映射到合并后的双文件
-  var mapped=null;
-  if(saved){
-    if(saved==="workbench.html"||saved==="workbench-m.html") mapped=saved;
-    else if(/-m\.html$/.test(saved)||/m\.html$/.test(saved)&&saved.indexOf("workbench-")===0) mapped="workbench-m.html";
-    else if(/\.html$/.test(saved)) mapped="workbench.html";
-  }
-  var isMobile = window.matchMedia("(max-width: 760px)").matches
-    || /Android|iPhone|iPod|Mobile|HarmonyOS/i.test(navigator.userAgent)
-    || (/iPad|Macintosh/.test(navigator.userAgent) && "ontouchend" in document && window.matchMedia("(max-width: 1024px)").matches);
-  var file = mapped || (isMobile ? "workbench-m.html" : "workbench.html");
-  try{ if(saved && saved!==file) localStorage.setItem("workbench-entry", file); }catch(e){}
-  location.replace(file);
+  var els=document.querySelectorAll('.reveal');
+  if(!('IntersectionObserver'in window)){els.forEach(function(e){e.classList.add('in')});return}
+  var io=new IntersectionObserver(function(entries){
+    entries.forEach(function(en){if(en.isIntersecting){en.target.classList.add('in');io.unobserve(en.target)}})
+  },{threshold:0.15,rootMargin:'0px 0px -60px 0px'});
+  els.forEach(function(e){io.observe(e)});
 })();
+// Entry redirect (preserved for PWA flow — bookmark workbench.html to skip)
+(function(){
+  var saved=null;try{saved=localStorage.getItem('workbench-entry')}catch(e){}
+  // v1.7 主题合并迁移
+  if(saved){
+    var mapped=null;
+    if(saved==='workbench.html'||saved==='workbench-m.html')mapped=saved;
+    else if(/-m\.html$/.test(saved))mapped='workbench-m.html';
+    else if(/\.html$/.test(saved))mapped='workbench.html';
+    if(mapped&&mapped!==saved)try{localStorage.setItem('workbench-entry',mapped)}catch(e){}
+  }
+})();
+// Service Worker
+if('serviceWorker' in navigator){addEventListener('load',function(){navigator.serviceWorker.register('sw.js').then(function(){return navigator.serviceWorker.ready}).then(function(reg){try{reg.active&&reg.active.postMessage({precache:location.pathname})}catch(e){}}).catch(function(){})})}
 </script>
-<script>if('serviceWorker' in navigator){addEventListener('load',function(){navigator.serviceWorker.register('sw.js').then(function(){ return navigator.serviceWorker.ready; }).then(function(reg){ try{ reg.active && reg.active.postMessage({precache: location.pathname}); }catch(e){} }).catch(function(){})})}</script>
 </body>
 </html>
