@@ -630,10 +630,17 @@ const CONFIG = {
       calc: d => { const it=d.note||[]; const w=it.filter(x=>x.date&&x.date>=daysAgo(6)).length; return { value: Math.min(Math.round(w/5*100),100), sub:`本周 ${w} 篇` }; } },
   ],
 
-  // 本周状态趋势（真实数据：读取用户填写的 __trend，7 个数字；没有就留空）
+  // 本周状态趋势（v1.3 自动化：__trendLog 按日自动打点；近 7 天覆盖≥4天启用，缺失日记 0；无记录时回退旧 __trend）
   trend: {
     title:"本周专注度趋势", unit:"分",
-    series: d => (Array.isArray(d.__trend) && d.__trend.length===7) ? d.__trend : [],
+    series: d => {
+      const log=d.__trendLog;
+      if(log && typeof log==="object"){
+        const days=[]; for(let i=6;i>=0;i--) days.push(daysAgo(i));
+        if(days.filter(k=>log[k]!=null).length>=4) return days.map(k=>log[k]==null?0:+log[k]);
+      }
+      return (Array.isArray(d.__trend) && d.__trend.length===7) ? d.__trend : [];
+    },
   },
 
   // 快速记录按钮（点了直接给对应模块新建）
@@ -720,6 +727,29 @@ function icon(name, size=22, sw=1.7){
 function isoToday(){ return new Date().toISOString().slice(0,10); }
 function today(){ return isoToday(); }
 function daysAgo(n){ const d=new Date(); d.setDate(d.getDate()-n); return d.toISOString().slice(0,10); }
+
+/* ---- v1.3 趋势自动化：每日状态分（0-10）= 待办完成度 4 分 + 打卡完成度 4 分 + 当日有笔记 2 分 ---- */
+function trendScoreToday(){
+  const t=today(); let s=0;
+  const todos=data.todo||[];
+  if(todos.length) s+=4*todos.filter(x=>x.done).length/todos.length;
+  const ci=data.checkin||[];
+  if(ci.length) s+=4*ci.filter(x=>x.log&&x.log[t]).length/ci.length;
+  if((data.note||[]).some(x=>x.date===t)) s+=2;
+  return Math.round(s);
+}
+function autoTrend(){
+  if(!data) return false;
+  const t=today(), s=trendScoreToday();
+  if(!data.__trendLog||typeof data.__trendLog!=="object") data.__trendLog={};
+  if(data.__trendLog[t]===s) return false;
+  data.__trendLog[t]=s; return true;
+}
+function trendXLabels(){
+  const dn=["日","一","二","三","四","五","六"]; let out="";
+  for(let i=6;i>=0;i--){ const d=new Date(); d.setDate(d.getDate()-i); out+="<span>"+dn[d.getDay()]+"</span>"; }
+  return out;
+}
 function daysAgo(n){ const d=new Date(); d.setDate(d.getDate()-n); return d.toISOString().slice(0,10); }
 function avgProgress(list){
   if(!list||!list.length) return { value: 0, sub: "0" };
@@ -766,10 +796,13 @@ const store = {
     CONFIG.modules.forEach(m => d[m.key] = structuredClone(m.seed||[]));
     // 默认趋势数据（近 7 天状态评分）
     d.__trend = [7, 6, 8, 5, 7, 8, 9];
+    d.__trendLog = {};
+    const seedTrend=[7, 6, 8, 5, 7, 8, 9];
+    for(let i=0;i<6;i++) d.__trendLog[daysAgo(6-i)] = seedTrend[i];   // 前 6 天铺演示值，今天由 autoTrend 实时计算
     return d;
   },
   saveLocal(){ try{ storage.setItem(CONFIG.storageKey, JSON.stringify(data)); }catch(e){ toast("存储空间已满，请导出备份后清理"); console.error("[store] saveLocal:", e); } },
-  save(){ this.saveLocal(); sync.schedulePush(); },
+  save(){ autoTrend(); this.saveLocal(); sync.schedulePush(); },
 };
 
 /* ============================================================
@@ -814,7 +847,7 @@ const sync = {
       const r = await res.json().catch(()=>({}));
       const localRev = this.cfg().rev||0;
       if(r && r.data!=null && (r.rev||0) > localRev){
-        data = r.data; store.saveLocal();
+        data = r.data; autoTrend(); store.saveLocal();
         this.set("rev", r.rev); if(r.updatedAt) this.set("updatedAt", r.updatedAt);
         this.set("lastSync", Date.now()); render();
         if(!silent) toast("已从云端拉取最新数据"); this.badge("已同步");
@@ -865,6 +898,7 @@ function openSyncPanel(){
 }
 
 let data = store.load();
+if(autoTrend()) store.saveLocal();   // v1.3 趋势分每日自动记录
 let view = "home";            // home | insight | <moduleKey>
 function persist(){ store.save(); render(); }
 
@@ -932,7 +966,7 @@ function renderHome(){
   const hasTrend = series.length>0;
   const avg = hasTrend ? Math.round(series.reduce((a,b)=>a+b,0)/series.length) : 0;
   const trend = hasTrend ? trendSVG(series)
-    : `<div class="trend-empty">${icon("chart",22)}<span>暂无本周数据</span></div>`;
+    : `<div class="trend-empty">${icon("chart",22)}<span>暂无本周数据 · 自动生成</span></div>`;
 
   const quick = CONFIG.quickAdd.map(q=>`<button class="qbtn" data-quick="${q.module}"><span class="e" style="background:${q.tint};color:${q.color}">${icon(q.icon,20)}<i class="qplus">${icon("plus",10,3)}</i></span><span class="l">${q.label}</span></button>`).join("");
 
@@ -946,7 +980,7 @@ function renderHome(){
     <div class="sec-title">快速记录</div>
     <div class="quick-grid">${quick}</div>
     <div class="panel trend-panel"><div class="ph">${icon("chart",15)} ${CONFIG.trend.title}${hasTrend?`<span class="avg">均 ${avg}${CONFIG.trend.unit}</span>`:''}</div>
-      ${trend}${hasTrend?`<div class="trend-x"><span>一</span><span>二</span><span>三</span><span>四</span><span>五</span><span>六</span><span>日</span></div>`:''}</div>`;
+      ${trend}${hasTrend?`<div class="trend-x">${trendXLabels()}</div>`:''}</div>`;
 
   wireHome();
 }
