@@ -1176,7 +1176,7 @@ const sync = {
       const r = await res.json().catch(()=>({}));
       if(r.rev!=null) this.set("rev", r.rev);
       if(r.updatedAt) this.set("updatedAt", r.updatedAt);
-      this.set("lastSync", Date.now()); this.badge("已同步");
+      this.set("lastSync", Date.now()); this._saveBase(data); this.badge("已同步");
     } catch(e){ this.badge("同步失败"); console.warn("[sync] push:", e); }
     finally { this._busy=false; }
   },
@@ -1187,13 +1187,43 @@ const sync = {
       if(!res.ok) throw new Error("HTTP "+res.status);
       const r = await res.json().catch(()=>({}));
       const localRev = this.cfg().rev||0;
+      if(!this._base()) this._saveBase(data);
       if(r && r.data!=null && (r.rev||0) > localRev){
-        data = r.data; autoTrend(); store.saveLocal();
+        const _remote=r.data; data = this.mergeData(_remote); autoTrend(); store.saveLocal();
         this.set("rev", r.rev); if(r.updatedAt) this.set("updatedAt", r.updatedAt);
-        this.set("lastSync", Date.now()); render();
-        if(!silent) toast("已从云端拉取最新数据"); this.badge("已同步");
+        this.set("lastSync", Date.now()); this._saveBase(data); render();
+        if(JSON.stringify(data)!==JSON.stringify(_remote)){ this.schedulePush(); if(!silent) toast("已合并本地与云端数据"); this.badge("已同步"); }
+        else { if(!silent) toast("已从云端拉取最新数据"); this.badge("已同步"); }
       } else if(!silent){ toast("本地已是最新"); }
     } catch(e){ if(!silent) toast("拉取失败："+e.message); this.badge("同步失败"); console.warn("[sync] pull:", e); }
+  },
+  _baseKey(){ return SYNC_KEY+"::base"; },
+  _saveBase(d){ try{ storage.setItem(this._baseKey(), JSON.stringify(d)); }catch(e){} },
+  _base(){ try{ const s=storage.getItem(this._baseKey()); return s?JSON.parse(s):null; }catch(e){ return null; } },
+  _mergeKey(L,R,B){
+    if(Array.isArray(L)&&Array.isArray(R)){
+      if(L.some(i=>!i||i.id==null)||R.some(i=>!i||i.id==null)) return L;
+      const Bm={};(B||[]).forEach(i=>{ if(i&&i.id!=null) Bm[i.id]=i; });
+      const Lm={},order=[]; L.forEach(i=>{ Lm[i.id]=i; order.push(i.id); });
+      const Rm={}; R.forEach(i=>{ Rm[i.id]=i; });
+      const ids=order.slice(); Object.keys(Rm).forEach(id=>{ if(!(id in Lm)) ids.push(id); });
+      const out=[];
+      ids.forEach(id=>{ const b=Bm[id],l=Lm[id],r=Rm[id];
+        if(l&&r){ const lc=!b||JSON.stringify(l)!==JSON.stringify(b); const rc=!b||JSON.stringify(r)!==JSON.stringify(b); out.push(rc&&!lc?r:l); }
+        else if(l) out.push(l); else if(r) out.push(r); });
+      return out;
+    }
+    return R;
+  },
+  mergeData(remote){
+    const base=this._base(); if(!base) return remote;
+    try{
+      const merged={}; const keys=new Set([...Object.keys(remote),...Object.keys(data)]);
+      keys.forEach(k=>{ const L=data[k],R=remote[k],B=base[k];
+        const lc=JSON.stringify(L)!==JSON.stringify(B), rc=JSON.stringify(R)!==JSON.stringify(B);
+        if(!rc) merged[k]=L; else if(!lc) merged[k]=R; else merged[k]=this._mergeKey(L,R,B); });
+      console.info("[sync] 字段级合并完成"); return merged;
+    }catch(e){ console.warn("[sync] 合并失败, 回退整替:", e); return remote; }
   },
   async now(){ await this.pull(false); await this.push(); },
   fmtLast(){ const t=this.cfg().lastSync; if(!t) return "—"; try { return new Date(t).toLocaleString("zh-CN",{hour12:false}); } catch(e){ return "—"; } },
@@ -1850,7 +1880,7 @@ function toast(msg, action){
 }
 function exportData(){
   try{ data.__lastExport=isoToday(); store.save(); }catch(e){}
-  const payload=JSON.stringify({ app:"personal-workbench", version:1, storageKey:CONFIG.storageKey, exportedAt:new Date().toISOString(), data }, null, 2);
+  const payload=JSON.stringify({ app:"personal-workbench", version:1, storageKey:CONFIG.storageKey, exportedAt:(d=>d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0")+" "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"))(new Date()), data }, null, 2);
   const blob=new Blob([payload], {type:"application/json"});
   const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
   a.download=`workbench-backup-${isoToday()}.json`; document.body.appendChild(a); a.click(); a.remove();
@@ -2016,6 +2046,7 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
         if (dark) { document.documentElement.removeAttribute('data-theme'); data.__theme='light'; store.save(); }
         else { document.documentElement.setAttribute('data-theme','dark'); data.__theme='dark'; store.save(); }
         update();
+        window.__syncThemeColor && window.__syncThemeColor();
       };
     }
 
@@ -2221,6 +2252,7 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
         else document.documentElement.removeAttribute("data-theme");
         const btn = document.getElementById("wb-theme");
         if (btn) btn.textContent = data.__theme === "dark" ? "☀️" : "🌙";
+        window.__syncThemeColor && window.__syncThemeColor();
       }
       if (data.__weather !== oldWeather && data.__weather) {
         const ico=document.getElementById("wb-wi"),t=document.getElementById("wb-wt"),ci=document.getElementById("wb-wc");
@@ -2367,10 +2399,12 @@ sync.startAuto(); if(sync.on) sync.pull(true).then(()=>{ if((sync.cfg().rev||0)=
     if(id&&id!=="amber")d.setAttribute("data-skin",id);else d.removeAttribute("data-skin");
     var s=SKINS.filter(function(x){return x.id===(id||"amber");})[0]||SKINS[0];
     document.title=s.emoji+" 我的工作台 · "+s.name;
+    var mt=document.querySelector('meta[name="theme-color"]'); if(mt){ try{ var cs=getComputedStyle(d); var pv=(cs.getPropertyValue("--page-bg")||"").trim(); if(pv) mt.setAttribute("content", pv); }catch(e){} }
     var dots=document.querySelectorAll(".skin-dot");
     for(var i=0;i<dots.length;i++){dots[i].classList.toggle("on",dots[i].getAttribute("data-skin")===s.id);}
   }
   window.applySkin=applySkin;
+  window.__syncThemeColor=function(){ try{ applySkin((typeof data!=="undefined"&&data.__skin)||"amber"); }catch(e){} };
   function buildPop(){
     var pop=document.getElementById("skin-pop");if(!pop)return;
     pop.innerHTML=SKINS.map(function(s){return '<button class="skin-dot" data-skin="'+s.id+'"><i style="background:'+s.c+'"></i><span>'+s.emoji+' '+s.name+'</span></button>';}).join("");
