@@ -883,6 +883,35 @@ function trendScoreToday(){
   if((data.note||[]).some(x=>x.date===t)) s+=2;
   return Math.round(s);
 }
+function ymOffset(n){ const d=new Date(); d.setDate(1); d.setMonth(d.getMonth()+n); return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0"); }
+function trendBreakdown(){
+  const t=today(); const todos=data.todo||[]; const ci=data.checkin||[]; const notes=data.note||[];
+  const td=todos.length?4*todos.filter(x=>x.done).length/todos.length:0;
+  const ck=ci.length?4*ci.filter(x=>x.log&&x.log[t]).length/ci.length:0;
+  const nt=notes.some(x=>x.date===t)?2:0;
+  return { s:Math.round(td+ck+nt), td:Math.round(td), ck:Math.round(ck), nt, full:todos.length>0||ci.length>0||notes.some(x=>x.date===t) };
+}
+function trendBDLine(has){
+  if(!has) return "";
+  const b=trendBreakdown();
+  const cap='<span style="opacity:.75">（待办 0-4 · 打卡 0-4 · 笔记 +2）</span>';
+  if(!b.full) return '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);font-size:12px;color:var(--text-tertiary)">今日暂无计入项 · 完成待办/打卡或写笔记自动累计 '+cap+'</div>';
+  return '<div style="margin-top:8px;padding-top:8px;border-top:1px dashed var(--border);font-size:12px;color:var(--text-tertiary)">今日 <b style="color:var(--text)">'+b.s+'</b>'+(CONFIG.trend.unit||" 分")+' = 待办 '+b.td+' + 打卡 '+b.ck+' + 笔记 '+b.nt+' '+cap+'</div>';
+}
+function recurNext(ds,freq){ const d=new Date(ds+"T00:00:00"); const _day=d.getDate(); if(freq==="week") d.setDate(d.getDate()+7); else if(freq==="month") d.setMonth(d.getMonth()+1); else d.setFullYear(d.getFullYear()+1); if(freq!=="week"&&d.getDate()!==_day) d.setDate(0); return fmtLocal(d); }
+function initRecurBills(){
+  const list=data.money||[]; if(!list.length) return; let changed=false; const earliest=daysAgo(30);
+  list.forEach(tpl=>{
+    if(!tpl.recur) return;
+    if(!tpl.nextDue){ tpl.nextDue=recurNext(tpl.date||isoToday(),tpl.recur); changed=true; }
+    let guard=0;
+    while(tpl.nextDue && tpl.nextDue<=isoToday() && guard<12){
+      if(tpl.nextDue>=earliest){ data.money.push({ id:Date.now()+Math.floor(Math.random()*1000)+guard, type:tpl.type, amount:tpl.amount, category:tpl.category||"其他", title:(tpl.title||"周期账单"), date:tpl.nextDue, fromRecur:true }); }
+      tpl.nextDue=recurNext(tpl.nextDue,tpl.recur); changed=true; guard++;
+    }
+  });
+  if(changed) persist();
+}
 function autoTrend(){
   if(!data) return false;
   const t=today(), s=trendScoreToday();
@@ -1211,12 +1240,12 @@ function trendTileHTML(){
   const avg=has?Math.round(series.reduce((a,b)=>a+b,0)/series.length):0;
   const body=has?trendSVG(series):`<div class="trend-empty">${icon("chart",26)}<span>暂无本周数据 · 完成待办与打卡后自动生成</span></div>`;
   return `<div class="tile b8"><div class="tile-h"><span class="tic">${icon("chart",16)}</span><div class="tt"><span class="en">MOOD TREND · 近 7 天</span><span class="zh">${CONFIG.trend.title}</span></div>${has?`<span class="r">均 ${avg}${CONFIG.trend.unit}</span>`:''}</div>
-    ${body}${has?`<div class="trend-x">${trendXLabels()}</div>`:''}</div>`;
+    ${body}${has?`<div class="trend-x">${trendXLabels()}</div>`:''}${trendBDLine(has)}</div>`;
 }
 
 /* 月度开销：finance 支出按分类占比 */
 function spendTileHTML(){
-  const all=data.money||[]; const exp=all.filter(x=>x.type==="expense").reduce((a,x)=>a+ +x.amount,0);
+  const all=(data.money||[]).filter(x=>(x.date||"").startsWith(ymOffset(0))); const exp=all.filter(x=>x.type==="expense").reduce((a,x)=>a+ +x.amount,0);
   const palette=["var(--module-4)","var(--module-3)","var(--module-1)","var(--module-2)","var(--module-5)","var(--accent)","var(--danger)"];
   const byCat={}; all.filter(x=>x.type==="expense").forEach(x=>{ const c=x.category||"其他"; byCat[c]=(byCat[c]||0)+ +x.amount; });
   const cats=Object.entries(byCat).sort((a,b)=>b[1]-a[1]);
@@ -1340,13 +1369,18 @@ function renderModule(key){
 
   let head="";
   if(m.type==="finance"){
-    const inc=all.filter(x=>x.type==="income").reduce((a,x)=>a+ +x.amount,0);
-    const exp=all.filter(x=>x.type==="expense").reduce((a,x)=>a+ +x.amount,0);
+    const ym=ymOffset(0), ymp=ymOffset(-1);
+    const cur=all.filter(x=>(x.date||"").startsWith(ym));
+    const inc=cur.filter(x=>x.type==="income").reduce((a,x)=>a+ +x.amount,0);
+    const exp=cur.filter(x=>x.type==="expense").reduce((a,x)=>a+ +x.amount,0);
+    const prev=all.filter(x=>(x.date||"").startsWith(ymp)&&x.type==="expense").reduce((a,x)=>a+ +x.amount,0);
+    const _d=prev?Math.round((exp-prev)/prev*100):null;
+    const _dl=_d==null?"":'<span style="font-size:11px;font-weight:400;color:'+(_d>0?"var(--danger)":"var(--module-1)")+'">'+(_d>0?"↑":"↓")+Math.abs(_d)+'%</span>';
     head=`<div class="mod-summary">
       <div class="mini"><div class="l">收入</div><div class="v" style="color:var(--module-1)">¥${inc}</div></div>
-      <div class="mini"><div class="l">支出</div><div class="v" style="color:var(--danger)">¥${exp}</div></div>
+      <div class="mini"><div class="l">支出</div><div class="v" style="color:var(--danger)">¥${exp}${_dl}</div></div>
       <div class="mini"><div class="l">结余</div><div class="v">¥${inc-exp}</div></div>
-      <div class="mini"><div class="l">笔数</div><div class="v">${all.length}</div></div></div>`;
+      <div class="mini"><div class="l">笔数</div><div class="v">${cur.length}<span style="font-size:11px;font-weight:400;color:var(--text-tertiary)"> 本月</span></div></div></div>`;
   } else if(m.type==="todo"){
     const done=all.filter(x=>x.done).length;
     head=headHero(m, `${done}/${all.length}`, "今日已完成");
@@ -1366,7 +1400,7 @@ function renderModule(key){
 
   $("#screen").innerHTML=`<div class="header"><div><h2>${m.name}</h2><p>${m.desc}</p></div><div class="spacer"></div><span class="date-chip">${icon("calendar",14)} ${dateStr()}</span></div>
     <div class="toolbar">
-      <div class="search-box">${icon("search",15,2.2)}<input id="search" placeholder="搜索…" value="${attr(searchQ)}"/></div>
+      <div class="search-box">${icon("search",15,2.2)}<input id="search" placeholder="本模块内搜索…" value="${attr(searchQ)}"/></div>
       <div class="spacer"></div><button class="btn" id="btn-new">${icon("plus",16,2.2)}新建</button></div>
     ${head}
     <div class="mod-layout">
@@ -1534,7 +1568,7 @@ function recHTML(m,x){
   if(m.type==="finance"){ const inc=x.type==="income";
     return `<div class="rec ${layoutCls}">${acts}<div class="top" style="padding-right:60px">${thumb}<div class="body" data-edit="${x.id}">
       <span class="rname">${esc(x.title)}</span>
-      <span class="badge" style="background:var(--surface-nested);color:var(--text-secondary)">${esc(x.category||'其他')}</span>
+      <span class="badge" style="background:var(--surface-nested);color:var(--text-secondary)">${esc(x.category||'其他')}</span>${x.recur?'<span class="badge" style="background:var(--surface-nested);color:var(--text-secondary)">🔄 '+(x.recur==='week'?'每周':(x.recur==='month'?'每月':'每年'))+'</span>':''}
       <span class="rdate">${x.date||''}</span>${customBlock}</div>
       <div class="amt ${inc?'inc':'exp'}">${inc?'+':'-'}¥${x.amount}</div></div></div>`; }
   // note
@@ -1582,7 +1616,8 @@ function openEditor(key,item){
       <div class="frow"><div class="field"><label>项目</label><input id="f-title" value="${attr(d.title)}" placeholder="午餐 / 稿费"/></div>
       <div class="field"><label>金额 ¥</label><input id="f-amt" type="number" value="${d.amount??''}" placeholder="0"/></div></div>
       <div class="field"><label>分类</label><div class="seg" id="f-cat">${(m.categories||[]).map(c=>`<div class="opt ${c===d.category?'on':''}" data-v="${attr(c)}" style="flex:0 0 auto;min-width:auto">${esc(c)}</div>`).join("")}</div></div>
-      <div class="field"><label>日期</label><input id="f-date" type="date" value="${d.date||isoToday()}"/></div>`;
+      <div class="field"><label>日期</label><input id="f-date" type="date" value="${d.date||isoToday()}"/></div>
+      <div class="field"><label>重复</label><div class="seg" id="f-recur"><div class="opt ${!d.recur?'on':''}" data-v="">不重复</div><div class="opt ${d.recur==='week'?'on':''}" data-v="week">每周</div><div class="opt ${d.recur==='month'?'on':''}" data-v="month">每月</div><div class="opt ${d.recur==='year'?'on':''}" data-v="year">每年</div></div></div>`;
   } else {
     fields=`<div class="field"><label>标题</label><input id="f-title" value="${attr(d.title)}" placeholder="给这条起个名"/></div>
       ${(m.moods&&m.moods.length)?`<div class="field"><label>标签 / 心情</label><div class="seg" id="f-mood">${m.moods.map(md=>`<div class="opt ${md===d.mood?'on':''}" data-v="${attr(md)}" style="flex:0 0 auto;min-width:auto">${md}</div>`).join("")}</div></div>`:''}
@@ -1629,7 +1664,7 @@ function openEditor(key,item){
     d.layout=seg("#f-layout")||'default';
     if(m.type==="todo"){ d.priority=seg("#f-prio")||d.priority; d.note=(val("#f-note")||"").trim(); }
     else if(m.type==="progress"){ d.current=Math.max(0,+val("#f-cur")||0); d.target=Math.max(1,+val("#f-tgt")||1); d.unit=(val("#f-unit")||"").trim(); d.note=(val("#f-note")||"").trim(); }
-    else if(m.type==="finance"){ d.type=seg("#f-ftype")||"expense"; d.amount=Math.max(0,+val("#f-amt")||0); d.category=seg("#f-cat")||(m.categories&&m.categories[0])||"其他"; d.date=val("#f-date"); }
+    else if(m.type==="finance"){ d.type=seg("#f-ftype")||"expense"; d.amount=Math.max(0,+val("#f-amt")||0); d.category=seg("#f-cat")||(m.categories&&m.categories[0])||"其他"; d.date=val("#f-date"); d.recur=seg("#f-recur")||""; if(d.recur){ d.nextDue=recurNext(d.date||isoToday(),d.recur); } else { delete d.nextDue; } }
     else if(m.type==="note"){ d.mood=seg("#f-mood")||d.mood||""; d.content=(val("#f-content")||"").trim(); d.date=val("#f-date"); }
     // save custom fields
     (m.fields||[]).forEach(f=>{
@@ -1848,23 +1883,25 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
         _origRender();
         if(view==='todo'){
           const tb=document.querySelector('.toolbar');
-          if(tb&&!tb.querySelector('.todo-filter')){
+          const _g=document.querySelector('#screen .rec');
+          const _tf=document.querySelector('.todo-filter');
+          if(!_tf&&(tb||_g)){
             const f=document.createElement('div');f.className='todo-filter';
             f.innerHTML='<span class="tf-label">筛选:</span><button data-f="all" class="'+(todoFilter==='all'?'active':'')+'">全部</button><button data-f="active" class="'+(todoFilter==='active'?'active':'')+'">未完成</button><button data-f="done" class="'+(todoFilter==='done'?'active':'')+'">已完成</button>';
-            tb.appendChild(f);
+            if(tb) tb.appendChild(f); else if(_g){ f.style.margin='0 0 12px'; _g.parentNode.insertBefore(f,_g); }
             f.querySelectorAll('button').forEach(b=>b.onclick=()=>{
               todoFilter=b.dataset.f;
               f.querySelectorAll('button').forEach(x=>x.classList.toggle('active',x.dataset.f===todoFilter));
               applyTodoFilter();
             });
             applyTodoFilter();
-          }
+          } else if(_tf) applyTodoFilter();
         }
       };
       function applyTodoFilter(){
-        const grid=document.querySelector('.rec-grid');if(!grid)return;
+        const grid=document.querySelector('#screen');if(!grid)return;
         grid.querySelectorAll('.rec, .rec-card, [data-rid]').forEach(el=>{
-          const id=el.dataset.id||el.dataset.rid||el.getAttribute('data-id');
+          const _ed=el.querySelector('[data-edit]'); const id=el.dataset.id||el.dataset.rid||(_ed&&_ed.dataset.edit)||el.getAttribute('data-id');
           if(!id)return;
           const item=(data.todo||[]).find(x=>String(x.id)===String(id));
           if(!item)return;
@@ -2116,6 +2153,7 @@ render();
 sync.badge(sync.on ? "自动同步中" : "未启用同步");
 sync.startAuto(); if(sync.on) sync.pull(true).then(()=>{ if((sync.cfg().rev||0)===0 && data && Object.keys(data).length) sync.push(); });
 (function(){ try{ var _cut=(function(){var _d=new Date();_d.setDate(_d.getDate()-30);return fmtLocal(_d);})(); if((data.__trash||[]).length){ var _before=data.__trash.length; data.__trash=data.__trash.filter(function(t){ return !t.__deletedAt || t.__deletedAt>=_cut; }); if(data.__trash.length!==_before) store.saveLocal(); } var _has=CONFIG.modules.some(function(m){ return (data[m.key]||[]).length>0; }); var _last=data.__lastExport||""; if(_has && (!_last || _last<=daysAgo(7))){ setTimeout(function(){ toast("距上次导出备份已超过 7 天，建议导出以防数据丢失", { label:"立即导出", fn:function(){ exportData(); } }); }, 3000); } }catch(e){} })();
+(function(){ try{ initRecurBills(); }catch(e){} })();
 
   /* ============================================================
      VISUAL ENHANCEMENTS JS
