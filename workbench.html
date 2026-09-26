@@ -1293,8 +1293,8 @@ const sync = {
   set(k,v){ const c=this.cfg(); if(v===undefined) delete c[k]; else c[k]=v; storage.setItem(SYNC_KEY, JSON.stringify(c)); },
   get on(){ const c=this.cfg(); return !!(c.url && c.token); },
   _busy:false, _t:null,
-  _base(){ return (this.cfg().url||"").replace(/\/+$/,""); },
-  _url(p){ return this._base() + p + "?token=" + encodeURIComponent(this.cfg().token||""); },
+  _apiBase(){ return (this.cfg().url||"").replace(/\/+$/,""); },   // v1.9.2: 原 _base 被下方快照版重名覆盖，致 _url 拼出非法地址
+  _url(p){ return this._apiBase() + p + "?token=" + encodeURIComponent(this.cfg().token||""); },
   schedulePush(){ if(!this.on) return; clearTimeout(this._t); this._t=setTimeout(()=>this.push(), 1000); },
    // 全自动同步：每 5 秒静默拉取；后台标签页与编辑弹窗打开时暂停；切回页面立即拉取
    startAuto(){
@@ -1371,7 +1371,7 @@ function openSyncPanel(){
   overlay.innerHTML = `
     <div class="modal">
       <h3>多端同步设置</h3>
-      <div class="sub">连接一个轻量后端，手机 / 电脑 / 平板的数据自动保持一致。未配置时数据仍只存本机。</div>
+      <div class="sub">连接一个轻量后端，手机 / 电脑 / 平板的数据自动保持一致。未配置时数据仍只存本机。当前版本 <b>v1.9.2</b>（同步修复版）。</div>
       <div class="field"><label>后端地址</label><input id="sy-url" class="sy-input" placeholder="http://192.168.1.20:8787 或 https://your.host" value="${attr(c.url||"")}"/></div>
       <div class="field"><label>同步令牌 Token</label><input id="sy-token" class="sy-input" placeholder="自定义一段足够长的随机密钥" value="${attr(c.token||"")}"/></div>
       <div class="sy-status" id="sy-status">${ sync.on ? ("已连接 · 上次同步：" + sync.fmtLast()) : "尚未启用同步" }</div>
@@ -2595,7 +2595,7 @@ sync.startAuto(); if(sync.on) sync.pull(true).then(()=>{ if((sync.cfg().rev||0)=
   else { document.addEventListener('DOMContentLoaded', function() { setTimeout(initEnhancements, 100); }); }
 
 </script>
-<script>try{localStorage.setItem("workbench-entry",location.pathname.split("/").pop())}catch(e){}</script><script>if('serviceWorker' in navigator){addEventListener('load',function(){navigator.serviceWorker.register('sw.js').then(function(){ return navigator.serviceWorker.ready; }).then(function(reg){ try{ reg.active && reg.active.postMessage({precache: location.pathname}); }catch(e){} }).catch(function(){})})}</script>
+<script>try{localStorage.setItem("workbench-entry",location.pathname.split("/").pop())}catch(e){}</script><script>if('serviceWorker' in navigator){addEventListener('load',function(){navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(){ return navigator.serviceWorker.ready; }).then(function(reg){ try{ reg.active && reg.active.postMessage({precache: location.pathname}); }catch(e){} }).catch(function(){})})}</script>
 <div class="ob" id="ob">
   <div class="ob-card">
     <div class="ob-t">👋 欢迎使用我的工作台</div>
