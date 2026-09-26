@@ -893,7 +893,7 @@
       <span class="sync-badge" id="syncBadge">未启用同步</span>
       <button class="sync-btn" id="btnSync" type="button">同步</button>
     </div>
-    <div class="df-hint">数据默认存本机 · 可开启多端同步</div>
+    <div class="df-hint">数据默认存本机 · 可开启多端同步 · v1.9.2</div>
     <div class="df-actions">
       <button class="df-btn" id="btnExport" type="button">导出备份</button>
       <button class="df-btn" id="btnImport" type="button">导入恢复</button>
@@ -2373,7 +2373,7 @@ sync.startAuto(); if(sync.on) sync.pull(true).then(()=>{ if((sync.cfg().rev||0)=
   else { document.addEventListener('DOMContentLoaded', function() { setTimeout(initEnhancements, 100); }); }
 
 </script>
-<script>try{localStorage.setItem("workbench-entry",location.pathname.split("/").pop())}catch(e){}</script><script>if('serviceWorker' in navigator){addEventListener('load',function(){navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(){ return navigator.serviceWorker.ready; }).then(function(reg){ try{ reg.active && reg.active.postMessage({precache: location.pathname}); }catch(e){} }).catch(function(){})})}</script>
+<script>try{localStorage.setItem("workbench-entry",location.pathname.split("/").pop())}catch(e){}</script><script>if('serviceWorker' in navigator){var _wbReloaded=false;navigator.serviceWorker.addEventListener('controllerchange',function(){if(_wbReloaded)return;_wbReloaded=true;location.reload()});addEventListener('load',function(){navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(reg){try{reg.update()}catch(e){}return navigator.serviceWorker.ready}).then(function(reg){try{reg.active&&reg.active.postMessage({precache:location.pathname})}catch(e){}}).catch(function(){});document.addEventListener('visibilitychange',function(){if(document.hidden)return;navigator.serviceWorker.getRegistration().then(function(r){try{r&&r.update()}catch(e){}}).catch(function(){})})})}</script>
 <div class="ob" id="ob">
   <div class="ob-card">
     <div class="ob-t">👋 欢迎使用我的工作台</div>
