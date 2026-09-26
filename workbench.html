@@ -1007,7 +1007,7 @@
         <span class="sync-badge" id="syncBadge">未启用同步</span>
         <button class="sync-btn" id="btnSync" type="button">同步</button>
       </div>
-      <div class="foot-hint">数据默认存本机 · 可开启多端同步 · v1.9.2</div>
+      <div class="foot-hint">数据默认存本机 · 可开启多端同步 · v1.9.3</div>
       <div class="foot-actions">
         <button class="foot-btn" id="btnExport" type="button">导出备份</button>
         <button class="foot-btn" id="btnImport" type="button">导入恢复</button>
@@ -1321,7 +1321,7 @@ const sync = {
       if(!res.ok) throw new Error("HTTP "+res.status);
       const r = await res.json().catch(()=>({}));
       const localRev = this.cfg().rev||0;
-      if(!this._base()) this._saveBase(data);
+      if(!this._base()) this._saveBase((this.cfg().rev||0) > 0 ? {} : data);   // v1.9.3: 曾同步过的设备(rev>0)首拉 base 置空→数组并集合并，保住故障期间的本地新增；从未同步的全新设备仍整替云端，避免种子数据入库
       if(r && r.data!=null && (r.rev||0) > localRev){
         const _remote=r.data; data = this.mergeData(_remote); autoTrend(); store.saveLocal();
         this.set("rev", r.rev); if(r.updatedAt) this.set("updatedAt", r.updatedAt);
@@ -1371,7 +1371,7 @@ function openSyncPanel(){
   overlay.innerHTML = `
     <div class="modal">
       <h3>多端同步设置</h3>
-      <div class="sub">连接一个轻量后端，手机 / 电脑 / 平板的数据自动保持一致。未配置时数据仍只存本机。当前版本 <b>v1.9.2</b>（同步修复版）。</div>
+      <div class="sub">连接一个轻量后端，手机 / 电脑 / 平板的数据自动保持一致。未配置时数据仍只存本机。当前版本 <b>v1.9.3</b>（同步修复版）。</div>
       <div class="field"><label>后端地址</label><input id="sy-url" class="sy-input" placeholder="http://192.168.1.20:8787 或 https://your.host" value="${attr(c.url||"")}"/></div>
       <div class="field"><label>同步令牌 Token</label><input id="sy-token" class="sy-input" placeholder="自定义一段足够长的随机密钥" value="${attr(c.token||"")}"/></div>
       <div class="sy-status" id="sy-status">${ sync.on ? ("已连接 · 上次同步：" + sync.fmtLast()) : "尚未启用同步" }</div>

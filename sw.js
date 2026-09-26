@@ -1,8 +1,9 @@
-/* 工作台 Service Worker v1.8.0 — 运行时缓存，离线可用
+/* 工作台 Service Worker v1.9.3 — 运行时缓存，离线可用
    • 只缓存同源 GET（页面/图标/manifest）
    • 云同步(pages.dev)与天气(open-meteo)是跨域请求，不拦截，永远走网络
-   • v1.8: HTML/导航走 network-first(免手动 bump 版本)，静态资源走 cache-first */
-const CACHE = 'wb-v1.9.2';
+   • v1.8: HTML/导航走 network-first(免手动 bump 版本)，静态资源走 cache-first
+   • v1.9.3: HTML 请求强制 revalidate(cache:'no-cache')，避免 CDN/HTTP 缓存让设备拿到旧页面 */
+const CACHE = 'wb-v1.9.3';
 const CORE = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
@@ -26,7 +27,7 @@ self.addEventListener('fetch', e => {
   const isHTML = req.mode === 'navigate' || (req.headers.get('accept') || '').includes('text/html');
   if (isHTML) {
     e.respondWith(
-      fetch(req).then(res => {
+      fetch(req, { cache: 'no-cache' }).then(res => {
         if (res.ok && res.type === 'basic') { const cp = res.clone(); caches.open(CACHE).then(c => c.put(req, cp)); }
         return res;
       }).catch(() => caches.match(req).then(hit => hit || caches.match('./')))
