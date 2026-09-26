@@ -623,7 +623,15 @@ svg{display:block}
     else if(/-m\.html$/.test(saved))mapped='workbench-m.html';
     else if(/\.html$/.test(saved))mapped='workbench.html';
     if(mapped&&mapped!==saved)try{localStorage.setItem('workbench-entry',mapped)}catch(e){}
+    saved=mapped||saved;
   }
+  // v1.9: 移动端自动进入手机版工作台；桌面停留落地页。手机想看落地页加 ?home
+  var q=location.search+location.hash;
+  if(/[?&#]home\b/.test(q))return;
+  var isMobile = window.matchMedia("(max-width: 760px)").matches
+    || /Android|iPhone|iPod|Mobile|HarmonyOS/i.test(navigator.userAgent)
+    || (/iPad|Macintosh/.test(navigator.userAgent) && "ontouchend" in document && window.matchMedia("(max-width: 1024px)").matches);
+  if(isMobile) location.replace(saved==='workbench.html' ? 'workbench.html' : 'workbench-m.html');
 })();
 // Service Worker
 if('serviceWorker' in navigator){addEventListener('load',function(){navigator.serviceWorker.register('sw.js').then(function(){return navigator.serviceWorker.ready}).then(function(reg){try{reg.active&&reg.active.postMessage({precache:location.pathname})}catch(e){}}).catch(function(){})})}
