@@ -4,7 +4,7 @@
    • v1.8: HTML/导航走 network-first(免手动 bump 版本)，静态资源走 cache-first
    • v1.9.3: HTML 请求强制 revalidate(cache:'no-cache')，避免 CDN/HTTP 缓存让设备拿到旧页面
    • v1.9.4: 随 v1.9.4 前端自动备份发布 */
-const CACHE = 'wb-v1.9.4';
+const CACHE = 'wb-v2.0.0';
 const CORE = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {
