@@ -2,8 +2,9 @@
    • 只缓存同源 GET（页面/图标/manifest）
    • 云同步(pages.dev)与天气(open-meteo)是跨域请求，不拦截，永远走网络
    • v1.8: HTML/导航走 network-first(免手动 bump 版本)，静态资源走 cache-first
-   • v1.9.3: HTML 请求强制 revalidate(cache:'no-cache')，避免 CDN/HTTP 缓存让设备拿到旧页面 */
-const CACHE = 'wb-v1.9.3';
+   • v1.9.3: HTML 请求强制 revalidate(cache:'no-cache')，避免 CDN/HTTP 缓存让设备拿到旧页面
+   • v1.9.4: 随 v1.9.4 前端自动备份发布 */
+const CACHE = 'wb-v1.9.4';
 const CORE = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png'];
 
 self.addEventListener('install', e => {

@@ -1007,9 +1007,10 @@
         <span class="sync-badge" id="syncBadge">未启用同步</span>
         <button class="sync-btn" id="btnSync" type="button">同步</button>
       </div>
-      <div class="foot-hint">数据默认存本机 · 可开启多端同步 · v1.9.3</div>
+      <div class="foot-hint">数据默认存本机 · 自动备份 · 可开启多端同步 · v1.9.4</div>
       <div class="foot-actions">
         <button class="foot-btn" id="btnExport" type="button">导出备份</button>
+        <button class="foot-btn" id="btnBak" type="button">自动备份</button>
         <button class="foot-btn" id="btnImport" type="button">导入恢复</button>
       </div>
       <input type="file" id="importFile" accept="application/json,.json" hidden/>
@@ -1276,7 +1277,7 @@ const store = {
     for(let i=0;i<6;i++) d.__trendLog[daysAgo(6-i)] = seedTrend[i];   // 前 6 天铺演示值，今天由 autoTrend 实时计算
     return d;
   },
-  saveLocal(){ try{ storage.setItem(CONFIG.storageKey, JSON.stringify(data)); }catch(e){ toast("存储空间已满，请导出备份后清理"); console.error("[store] saveLocal:", e); } },
+  saveLocal(){ try{ const s=JSON.stringify(data); storage.setItem(CONFIG.storageKey, s); try{ bak.save(s); }catch(_e){} }catch(e){ toast("存储空间已满，请导出备份后清理"); console.error("[store] saveLocal:", e); } },
   save(){ autoTrend(); this.saveLocal(); sync.schedulePush(); },
 };
 
@@ -1371,7 +1372,7 @@ function openSyncPanel(){
   overlay.innerHTML = `
     <div class="modal">
       <h3>多端同步设置</h3>
-      <div class="sub">连接一个轻量后端，手机 / 电脑 / 平板的数据自动保持一致。未配置时数据仍只存本机。当前版本 <b>v1.9.3</b>（同步修复版）。</div>
+      <div class="sub">连接一个轻量后端，手机 / 电脑 / 平板的数据自动保持一致。未配置时数据仍只存本机。当前版本 <b>v1.9.4</b>。</div>
       <div class="field"><label>后端地址</label><input id="sy-url" class="sy-input" placeholder="http://192.168.1.20:8787 或 https://your.host" value="${attr(c.url||"")}"/></div>
       <div class="field"><label>同步令牌 Token</label><input id="sy-token" class="sy-input" placeholder="自定义一段足够长的随机密钥" value="${attr(c.token||"")}"/></div>
       <div class="sy-status" id="sy-status">${ sync.on ? ("已连接 · 上次同步：" + sync.fmtLast()) : "尚未启用同步" }</div>
@@ -2124,6 +2125,76 @@ $("#btnImport").onclick=()=>$("#importFile").click();
 $("#importFile").onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(f) importData(f); e.target.value=""; };
 $("#btnSync").onclick=()=>sync.openPanel();
 
+/* ---------- 自动备份：每日滚动快照（v1.9.4，静默运行，零交互） ---------- */
+/* • 每次 saveLocal 后自动比对：当天已有快照且内容未变则跳过，变了才写入
+   • 快照存 {storageKey}::bak::{日期}，索引存 ::bakIdx（兼容内存降级存储）
+   • 最多保留 3 份，超出删最旧；配额溢出先删最旧重试一次，再失败静默放弃 */
+const bak = {
+  max: 3,
+  _skip: false,
+  _key(d){ return CONFIG.storageKey + "::bak::" + d; },
+  idx(){ try{ return JSON.parse(storage.getItem(CONFIG.storageKey+"::bakIdx")||"[]"); }catch(e){ return []; } },
+  save(snapStr){
+    try{
+      if(this._skip) return;                                      // 恢复动作中，不覆盖快照
+      const today = isoToday();
+      if(storage.getItem(this._key(today)) === snapStr) return;   // 今天已备且内容未变
+      let idx = this.idx().filter(d=>d!==today); idx.push(today);
+      try{ storage.setItem(this._key(today), snapStr); }
+      catch(e){   // 配额溢出：删最旧重试一次
+        if(!idx.length) return;
+        try{ storage.removeItem(this._key(idx[0])); idx.shift(); storage.setItem(this._key(today), snapStr); }catch(e2){ console.warn("[bak] 配额不足，本次跳过快照"); return; }
+      }
+      while(idx.length > this.max){ try{ storage.removeItem(this._key(idx[0])); }catch(e){} idx.shift(); }
+      storage.setItem(CONFIG.storageKey+"::bakIdx", JSON.stringify(idx));
+    }catch(e){ console.warn("[bak]", e); }
+  },
+  list(){
+    return this.idx().slice().reverse().map(d=>{
+      let kb = 0;
+      try{ const s = storage.getItem(this._key(d)); if(s) kb = Math.max(1, Math.round(s.length/1024)); }catch(e){}
+      return { date:d, kb };
+    });
+  },
+  restore(dateStr){
+    try{
+      const s = storage.getItem(this._key(dateStr));
+      if(!s){ toast("该快照不存在"); return; }
+      const o = JSON.parse(s);
+      if(!o || typeof o!=="object" || Array.isArray(o)){ toast("快照数据异常"); return; }
+      this._skip = true;                    // 恢复本身不得覆盖今天的快照（保留撤销能力）
+      try{ data = o; persist(); } finally { this._skip = false; }
+      toast("已恢复 "+dateStr+" 的自动备份");
+    }catch(e){ toast("恢复失败："+e.message); }
+  },
+};
+function openBakPanel(){
+  const list = bak.list();
+  const rows = list.length
+    ? list.map(x=>`<div style="display:flex;align-items:center;justify-content:space-between;padding:9px 2px;border-bottom:1px solid var(--border,rgba(127,127,127,.22))"><span><b>${x.date}</b> <span style="opacity:.55;font-size:12px;margin-left:6px">${x.kb} KB</span></span><button class="btn ghost bak-restore" data-bak="${x.date}" type="button">恢复</button></div>`).join("")
+    : `<div class="sub">暂无快照，正常使用中会每天自动生成一份。</div>`;
+  const overlay = document.createElement("div"); overlay.className="overlay";
+  overlay.innerHTML = `
+    <div class="modal">
+      <h3>自动备份</h3>
+      <div class="sub">系统每天自动保存一份数据快照（保留最近 ${bak.max} 天），无需任何手动操作。需要长期留存或转移设备时，仍可用「导出备份」生成文件。恢复快照会覆盖当前全部数据。</div>
+      ${rows}
+      <div class="modal-actions">
+        <div class="spacer"></div>
+        <button class="btn ghost" id="bak-close">关闭</button>
+      </div>
+    </div>`;
+  document.body.appendChild(overlay);
+  const close = ()=>overlay.remove();
+  overlay.onclick = e=>{ if(e.target===overlay) close(); };
+  overlay.querySelector("#bak-close").onclick = close;
+  overlay.querySelectorAll(".bak-restore").forEach(b=>b.onclick=()=>{
+    const d = b.getAttribute("data-bak");
+    if(confirm("用 "+d+" 的快照覆盖当前全部数据？恢复前会把当前数据先自动快照一份，可再次恢复撤销。")){ bak.save(JSON.stringify(data)); bak.restore(d); close(); }
+  });
+}
+$("#btnBak").onclick=openBakPanel;
+
 /* ---------- utils ---------- */
 function esc(s){ return String(s??"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
@@ -2490,7 +2561,7 @@ buildNav();
 render();
 sync.badge(sync.on ? "自动同步中" : "未启用同步");
 sync.startAuto(); if(sync.on) sync.pull(true).then(()=>{ if((sync.cfg().rev||0)===0 && data && Object.keys(data).length) sync.push(); });
-(function(){ try{ var _cut=(function(){var _d=new Date();_d.setDate(_d.getDate()-30);return fmtLocal(_d);})(); if((data.__trash||[]).length){ var _before=data.__trash.length; data.__trash=data.__trash.filter(function(t){ return !t.__deletedAt || t.__deletedAt>=_cut; }); if(data.__trash.length!==_before) store.saveLocal(); } var _has=CONFIG.modules.some(function(m){ return (data[m.key]||[]).length>0; }); var _last=data.__lastExport||""; if(_has && (!_last || _last<=daysAgo(7))){ setTimeout(function(){ toast("距上次导出备份已超过 7 天，建议导出以防数据丢失", { label:"立即导出", fn:function(){ exportData(); } }); }, 3000); } }catch(e){} })();
+(function(){ try{ var _cut=(function(){var _d=new Date();_d.setDate(_d.getDate()-30);return fmtLocal(_d);})(); if((data.__trash||[]).length){ var _before=data.__trash.length; data.__trash=data.__trash.filter(function(t){ return !t.__deletedAt || t.__deletedAt>=_cut; }); if(data.__trash.length!==_before) store.saveLocal(); } bak.save(JSON.stringify(data)); /* v1.9.4: 移除"距上次备份超过 x 天"打扰式提醒，改为每日自动快照 */ }catch(e){} })();
 (function(){ try{ initRecurBills(); }catch(e){} })();
 
   /* ============================================================
