@@ -2371,7 +2371,7 @@ function renderRemind(){
       toast("云端触达配置已保存");
     }catch(e){ toast("已保存到本地，云端保存失败："+e.message); }
   };
-  if(sync.on) fetch(sync._url("/remind/config")).then(r=>r.ok?r.json():null).then(j=>{ if(j&&j.config){ data.__cloudRemind=j.config; if(view==="remind") renderRemind(); } }).catch(()=>{});
+  if(sync.on) fetch(sync._url("/remind/config")).then(r=>r.ok?r.json():null).then(j=>{ if(j&&j.config){ data.__cloudRemind=j.config; } }).catch(()=>{});
 }
 function openRemindEditor(id){
   const it=id!=null?(data.remind||[]).find(x=>x.id==id)||{}:{};

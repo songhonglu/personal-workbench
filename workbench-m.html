@@ -790,9 +790,9 @@
   .wb-w-ico{font-size:18px;line-height:1}
   .wb-w-t{font-size:14px;font-weight:600;color:var(--text)}
   .wb-w-c{font-size:11px;color:var(--text-secondary)}
-  .wb-w-panel{position:absolute;top:calc(100% + 6px);right:0;width:280px;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--radius-control);box-shadow:var(--shadow-overlay);z-index:200;padding:14px;display:none}
+  .wb-w-panel{position:absolute;top:calc(100% + 6px);left:0;right:0;width:auto;background:var(--surface-card);border:1px solid var(--border);border-radius:var(--radius-control);box-shadow:var(--shadow-overlay);z-index:200;padding:14px;display:none}
   .wb-w-panel.show{display:block}
-  .wb-w-panel input{width:100%;padding:7px 10px;border:1px solid var(--border-input);border-radius:6px;background:var(--surface-nested);color:var(--text);font-size:13px;outline:none;margin-bottom:6px}
+  .wb-w-panel input{width:100%;padding:7px 10px;border:1px solid var(--border-input);border-radius:6px;background:var(--surface-nested);color:var(--text);font-size:16px;outline:none;margin-bottom:6px}
   .wb-w-panel input:focus{border-color:var(--accent)}
   .wb-w-res{max-height:180px;overflow-y:auto}
   .wb-w-ci{padding:7px 10px;cursor:pointer;border-radius:6px;font-size:13px;color:var(--text)}
@@ -927,13 +927,13 @@
     </div>
     <div class="wb-weather" id="wb-w" style="flex-shrink:0">
       <span class="wb-w-ico" id="wb-wi">🌡️</span><span class="wb-w-t" id="wb-wt">--</span><span class="wb-w-c" id="wb-wc">定位中…</span>
-      <div class="wb-w-panel" id="wb-wp">
-        <input id="wb-ws" placeholder="搜索城市…" autocomplete="off"/>
-        <div class="wb-w-res" id="wb-wr"></div>
-        <div class="wb-w-hint">输入城市名搜索</div>
-      </div>
     </div>
     <button class="wb-theme-btn" id="wb-help" title="使用指南">❓</button><span class="skin-wrap"><button class="wb-theme-btn" id="wb-skin" title="切换主题配色">🎨</button><div class="skin-pop" id="skin-pop"></div></span><button class="wb-theme-btn" id="wb-theme" title="切换深色/浅色">🌙</button>
+    <div class="wb-w-panel" id="wb-wp">
+      <input id="wb-ws" placeholder="搜索城市…" autocomplete="off"/>
+      <div class="wb-w-res" id="wb-wr"></div>
+      <div class="wb-w-hint">输入城市名搜索</div>
+    </div>
   </div>
   <div id="screen"></div>
 </div>
@@ -2121,7 +2121,7 @@ function renderRemind(){
       toast("云端触达配置已保存");
     }catch(e){ toast("已保存到本地，云端保存失败："+e.message); }
   };
-  if(sync.on) fetch(sync._url("/remind/config")).then(r=>r.ok?r.json():null).then(j=>{ if(j&&j.config){ data.__cloudRemind=j.config; if(view==="remind") renderRemind(); } }).catch(()=>{});
+  if(sync.on) fetch(sync._url("/remind/config")).then(r=>r.ok?r.json():null).then(j=>{ if(j&&j.config){ data.__cloudRemind=j.config; } }).catch(()=>{});
 }
 function openRemindEditor(id){
   const it=id!=null?(data.remind||[]).find(x=>x.id==id)||{}:{};
