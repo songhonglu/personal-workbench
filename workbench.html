@@ -2072,8 +2072,45 @@ function renderInsight(){
     ${rankList}
   </div>`;
 
+  // v1.13.0: 多图表仪表盘数据
+  const habitCount=(data.checkin||[]).length;
+  const habitPct=habitCount?Math.round((data.checkin||[]).filter(h=>weekDates.some(d=>h.log&&h.log[d])).length/habitCount*100):0;
+  const pomoTotal=(data.__pomo&&data.__pomo.total)?data.__pomo.total.min:0;
+  const days=weekDates;
+  const dashCard=(label,val,sub,col)=>`<div class="side-card"><div class="sh" style="margin-bottom:8px;font-size:12px;color:var(--text-secondary)">${label}</div><div style="font-size:24px;font-weight:800;color:${col||'var(--text)'}">${val}</div>${sub?`<div style="font-size:11px;color:var(--text-tertiary);margin-top:4px">${sub}</div>`:''}</div>`;
+  const taskAll=(data.todo||[]);
+  const taskPct=taskAll.length?Math.round(taskAll.filter(x=>x.done).length/taskAll.length*100):0;
+  const trendSVG=(dates)=>{
+    const vals=dates.map(d=>(data.money||[]).filter(x=>x.date===d&&x.type==="expense").reduce((a,x)=>a+ +x.amount,0));
+    const mx=Math.max(...vals,1);
+    const W=340,H=110,P=24;
+    const pts=vals.map((v,i)=>[P+i*(W-2*P)/(vals.length-1||1), H-P-(v/mx)*(H-2*P)]);
+    const line=pts.map(p=>p.join(',')).join(' ');
+    const area=`${P},${H-P} `+line+` ${W-P},${H-P}`;
+    return `<svg width="100%" viewBox="0 0 ${W} ${H}" style="max-width:${W}px">
+      <defs><linearGradient id="tg1" x1="0" y1="0" x2="0" y2="1"><stop offset="0%" stop-color="var(--accent)" stop-opacity=".35"/><stop offset="100%" stop-color="var(--accent)" stop-opacity="0"/></linearGradient></defs>
+      <polygon points="${area}" fill="url(#tg1)"/>
+      <polyline points="${line}" fill="none" stroke="var(--accent)" stroke-width="2" stroke-linejoin="round"/>
+      ${pts.map(p=>`<circle cx="${p[0]}" cy="${p[1]}" r="3" fill="var(--accent)"/>`).join("")}
+      ${vals.map((v,i)=>`<text x="${P+i*(W-2*P)/(vals.length-1||1)}" y="${H-8}" font-size="9" fill="var(--text-tertiary)" text-anchor="middle">${dates[i].slice(5)}</text>`).join("")}
+    </svg>`;
+  };
+  const heatColor=(n,cnt)=>{ if(!n) return "var(--surface-nested)"; const ratio=cnt?n/cnt:0; return ratio>0.8?"#1d6b3f":ratio>0.5?"#2e8b57":ratio>0.2?"#90ee90":"#d4f5dd"; };
+  const dashCards=`<div class="sec-title">📈 多图表仪表盘</div>
+  <div class="pin-list" style="grid-template-columns:repeat(2,1fr)">
+    ${dashCard("任务完成率",taskPct+"%",taskAll.length+" 项中 "+taskAll.filter(x=>x.done).length+" 项完成","var(--module-1)")}
+    ${dashCard("习惯坚持率",habitPct+"%",habitCount+" 个习惯，近7天有打卡","var(--module-3)")}
+    ${dashCard("今日专注",pomoToday+" 个",pomoTotal+" 分钟累计番茄","var(--module-5)")}
+    ${dashCard("本月结余","¥"+(monInc-monExp),monExp>monInc?"支出超过收入，注意超支":"收支健康","var(--module-1)")}
+  </div>
+  <div class="side-card" style="margin-top:12px"><div class="sh" style="margin-bottom:10px">${icon("chart",15)} 近 7 天支出趋势</div>${trendSVG(days)}</div>
+  <div class="side-card" style="margin-top:12px"><div class="sh" style="margin-bottom:8px">${icon("chart",15)} 近 7 天打卡热力</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">${days.map(d=>{
+    const n=(data.checkin||[]).reduce((a,h)=>a+((h.log&&h.log[d])?1:0),0);
+    return `<div style="text-align:center"><div style="font-size:10px;color:var(--text-tertiary)">${parseInt(d.slice(8,10))}</div><div style="width:22px;height:22px;margin:3px auto;border-radius:4px;background:${heatColor(n,habitCount)}"></div></div>`;
+  }).join("")}</div></div>`;
   $("#screen").innerHTML=`<div class="header"><div><h2>洞察</h2><p>各模块进展一览 · 记录—执行—统计—反馈</p></div><div class="spacer"></div><span class="date-chip">${icon("calendar",14)} ${dateStr()}</span></div>
     <div class="sec-title">模块概况</div><div class="pin-list" style="grid-template-columns:repeat(3,1fr)">${cards}</div>
+    ${dashCards}
     <div class="mod-layout"><div class="mod-main"></div><aside class="mod-side">${weekReport}${monReport}${rankCard}</aside></div>`;
   $("#screen").querySelectorAll("[data-open]").forEach(el=>el.onclick=()=>go(el.dataset.open));
 }
