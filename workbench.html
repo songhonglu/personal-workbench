@@ -970,7 +970,7 @@
   :root[data-theme="dark"]{
     --page-bg:#1a1a2e;--surface-card:#252537;--surface-nested:#1e1e30;--surface-glass:rgba(37,37,55,.85);
     --border:#333348;--border-input:#3a3a52;--glass-border:rgba(50,50,72,.5);
-    --text:#e0e0e8;--text-secondary:#a0a0b8;--text-tertiary:#6a6a82;
+    --text:#e0e0e8;--text-secondary:#a8a8c0;--text-tertiary:#78789a;
     --accent-muted:rgba(100,100,160,.15);
     --drawer-bg:#12121f;--drawer-bg-top:#16162a;--drawer-text:#c0c0d8;
     --drawer-text-mute:rgba(192,192,216,.5);--drawer-hover:rgba(192,192,216,.08);--drawer-active:rgba(192,192,216,.12);
@@ -979,6 +979,17 @@
     --orb-1:rgba(100,100,160,.08);--orb-2:rgba(100,100,160,.06);--orb-3:rgba(100,100,160,.04);
     --greet-image:radial-gradient(120% 130% at 85% 15%,rgba(100,100,160,.1),rgba(100,100,160,.03) 55%,rgba(100,100,160,0) 100%);
   }
+  /* 深色模式增强：新组件 + 对比度兜底（WCAG AA） */
+  :root[data-theme="dark"] .side-card,
+  :root[data-theme="dark"] .v2-card,
+  :root[data-theme="dark"] .v2-mini{ background:var(--surface-card); }
+  :root[data-theme="dark"] .heat-cell,
+  :root[data-theme="dark"] .wb-heat-cell{ background:var(--surface-nested); }
+  :root[data-theme="dark"] .pin-list{ background:var(--surface-card); }
+  :root[data-theme="dark"] input[type="number"],
+  :root[data-theme="dark"] input[type="text"]{ background:var(--surface-nested); color:var(--text); }
+  :root[data-theme="dark"] .stat-row .val{ color:var(--text); }
+  :root[data-theme="dark"] .sec-title{ color:var(--text-secondary); }
   .wb-theme-btn{cursor:pointer;padding:5px 10px;border-radius:var(--radius-control);border:1px solid var(--border);background:var(--surface-card);font-size:16px;line-height:1;transition:all .2s;flex-shrink:0}
   .wb-theme-btn:hover{border-color:var(--accent)}
   /* 月度视图 */
