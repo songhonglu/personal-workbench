@@ -380,22 +380,22 @@
   /* ============================================================
      BENTO DASHBOARD — 首页复杂网格布局（墨色中性 · 高密度）
      ============================================================ */
-  .bento { display:grid; grid-template-columns: repeat(12, 1fr); gap:16px; align-items:stretch; }
+  .bento { display:grid; grid-template-columns: repeat(12, 1fr); gap:12px; align-items:stretch; }
   .bento > * { min-width:0; }   /* 允许网格轨道收窄，避免窄屏内容溢出 */
   .b3{grid-column:span 3} .b4{grid-column:span 4} .b5{grid-column:span 5}
   .b6{grid-column:span 6} .b7{grid-column:span 7} .b8{grid-column:span 8} .b12{grid-column:span 12}
 
   /* 分组标题（EN 副标题 + 中文标题 + 分隔线） */
-  .sec-grp { display:flex; align-items:center; gap:12px; margin:26px 2px 14px; }
-  .sec-grp .bar { width:4px; height:19px; border-radius:2px; background:var(--accent); flex:0 0 auto; }
-  .sec-grp .zh { font-size:16px; font-weight:800; letter-spacing:-.02em; }
+  .sec-grp { display:flex; align-items:center; gap:12px; margin:14px 2px 6px; }
+  .sec-grp .bar { width:4px; height:16px; border-radius:2px; background:var(--accent); flex:0 0 auto; }
+  .sec-grp .zh { font-size:15px; font-weight:800; letter-spacing:-.02em; }
   .sec-grp .en { font-size:10.5px; font-weight:800; letter-spacing:.15em; color:var(--text-tertiary); }
   .sec-grp .line { flex:1; height:1px; background:var(--border); }
 
   /* 通用瓷砖 */
   .tile { background:var(--surface-card); border:1px solid var(--border); border-radius:var(--radius-card); box-shadow:var(--shadow-card);
-    padding:18px 20px; display:flex; flex-direction:column; }
-  .tile-h { display:flex; align-items:center; gap:9px; margin-bottom:14px; }
+    padding:13px 18px; display:flex; flex-direction:column; }
+  .tile-h { display:flex; align-items:center; gap:9px; margin-bottom:9px; }
   .tile-h .tic { color:var(--text-tertiary); display:flex; }
   .tile-h .en { font-size:9.5px; font-weight:800; letter-spacing:.14em; color:var(--text-tertiary); line-height:1; }
   .tile-h .zh { font-size:14px; font-weight:800; letter-spacing:-.01em; line-height:1.15; }
@@ -407,39 +407,39 @@
   .ov2-body .rings { align-content:center; }
   .ov2-side { position:relative; overflow:hidden; border-radius:var(--radius-card);
     background:linear-gradient(150deg,#33322e 0%,#232220 62%,#1b1a18 100%); box-shadow:var(--shadow-overlay);
-    padding:20px; display:flex; flex-direction:column; justify-content:space-between; gap:12px; }
+    padding:14px; display:flex; flex-direction:column; justify-content:space-between; gap:8px; }
   .ov2-side::before { content:""; position:absolute; width:190px; height:190px; border-radius:50%; right:-70px; top:-80px;
     background:radial-gradient(circle,rgba(95,122,153,.4),transparent 70%); pointer-events:none; }
   .ov2-side::after { content:""; position:absolute; width:150px; height:150px; border-radius:50%; left:-55px; bottom:-70px;
     background:radial-gradient(circle,rgba(189,138,78,.32),transparent 70%); pointer-events:none; }
   .ov2-stat { position:relative; z-index:1; display:flex; align-items:center; gap:13px; cursor:pointer;
-    padding:12px 4px; border-radius:var(--radius-tile); transition:background .15s; }
+    padding:8px 4px; border-radius:var(--radius-tile); transition:background .15s; }
   .ov2-stat:hover { background:rgba(244,243,240,.06); }
   @keyframes wbflash { 0%,100%{box-shadow:0 0 0 0 transparent} 40%{box-shadow:0 0 0 3px var(--accent-muted)} }
   .flash { animation:wbflash 1s ease 1; border-radius:10px; }
   @keyframes wbflash { 0%,100%{box-shadow:0 0 0 0 transparent} 40%{box-shadow:0 0 0 3px var(--accent-muted)} }
   .flash { animation:wbflash 1s ease 1; border-radius:10px; }
   .ov2-stat + .ov2-stat { border-top:1px solid rgba(244,243,240,.09); }
-  .ov2-stat .s-ic { width:40px; height:40px; border-radius:12px; display:grid; place-items:center; flex:0 0 auto;
+  .ov2-stat .s-ic { width:34px; height:34px; border-radius:10px; display:grid; place-items:center; flex:0 0 auto;
     background:rgba(244,243,240,.08); box-shadow:inset 0 0 0 1px rgba(244,243,240,.1); }
   .ov2-stat .s-tx { min-width:0; }
-  .ov2-stat .s-v { font-size:24px; font-weight:800; letter-spacing:-.03em; line-height:1.05; color:#f4f3f0;
+  .ov2-stat .s-v { font-size:20px; font-weight:800; letter-spacing:-.03em; line-height:1.05; color:#f4f3f0;
     font-variant-numeric:tabular-nums; }
   .ov2-stat .s-l { font-size:11.5px; color:rgba(244,243,240,.55); margin-top:3px; }
 
   /* 大时钟卡（暗色·点缀光晕） */
   .clock-card { position:relative; overflow:hidden; border-radius:var(--radius-sheet);
     background:linear-gradient(140deg,#33322e 0%,#232220 60%,#1c1b19 100%); color:#f4f3f0;
-    padding:26px 28px; box-shadow:var(--shadow-overlay); display:flex; flex-direction:column; justify-content:space-between; min-height:196px; }
+    padding:18px 24px; box-shadow:var(--shadow-overlay); display:flex; flex-direction:column; justify-content:space-between; min-height:158px; }
   .clock-card::before { content:""; position:absolute; width:220px; height:220px; border-radius:50%; right:-70px; top:-90px;
     background:radial-gradient(circle,rgba(189,138,78,.35),transparent 70%); }
   .clock-card::after { content:""; position:absolute; width:170px; height:170px; border-radius:50%; left:-60px; bottom:-80px;
     background:radial-gradient(circle,rgba(111,143,106,.28),transparent 70%); }
   .clock-card > * { position:relative; z-index:1; }
-  .clock-card .hi { font-size:24px; font-weight:800; letter-spacing:-.02em; }
-  .clock-card .sub { font-size:12.5px; opacity:.62; margin-top:5px; max-width:230px; line-height:1.5; }
-  .clock-card .clk { font-size:clamp(38px,4.4vw,50px); font-weight:800; letter-spacing:.01em; font-variant-numeric:tabular-nums; line-height:1; }
-  .clock-card .cmeta { display:flex; align-items:center; gap:10px; margin-top:9px; font-size:12px; opacity:.6; }
+  .clock-card .hi { font-size:20px; font-weight:800; letter-spacing:-.02em; }
+  .clock-card .sub { font-size:12.5px; opacity:.62; margin-top:3px; max-width:230px; line-height:1.5; }
+  .clock-card .clk { font-size:clamp(30px,3.4vw,40px); font-weight:800; letter-spacing:.01em; font-variant-numeric:tabular-nums; line-height:1; }
+  .clock-card .cmeta { display:flex; align-items:center; gap:10px; margin-top:6px; font-size:12px; opacity:.6; }
   .clock-card .cmeta .dot { width:4px; height:4px; border-radius:50%; background:currentColor; }
 
   /* 焦点/统计瓷砖 */
