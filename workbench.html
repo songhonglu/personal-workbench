@@ -3447,20 +3447,39 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
     const WMO = {0:'☀️',1:'🌤️',2:'⛅',3:'☁️',45:'🌫️',48:'🌫️',51:'🌦️',53:'🌦️',55:'🌧️',56:'🌧️',57:'🌧️',61:'🌧️',63:'🌧️',65:'🌧️',66:'🌧️',67:'🌧️',71:'🌨️',73:'🌨️',75:'❄️',77:'❄️',80:'🌦️',81:'🌧️',82:'🌧️',85:'🌨️',86:'❄️',95:'⛈️',96:'⛈️',99:'⛈️'};
     const esc2 = s => String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 
-    // --- 全局搜索 ---
+    // --- 全局搜索（v1.13.0 增强：高亮 + 多字段） ---
+    function highlightText(text,q){
+      if(!q) return esc2(text);
+      const lower=text.toLowerCase(), ql=q.toLowerCase();
+      let out='', i=0, idx;
+      while((idx=lower.indexOf(ql,i))>=0){
+        out+=esc2(text.slice(i,idx))+'<mark style="background:var(--accent-muted);color:var(--accent-dark);padding:0 1px;border-radius:2px">'+esc2(text.slice(idx,idx+q.length))+'</mark>';
+        i=idx+q.length;
+      }
+      return out+esc2(text.slice(i));
+    }
     function gSearch(q){
       q=q.trim().toLowerCase(); if(!q) return [];
       const out=[];
       CONFIG.modules.forEach(m=>{ if(!Array.isArray(data[m.key])) return; (data[m.key]||[]).forEach(x=>{
-        const t=(x.title||'').toLowerCase(), c=(x.note||x.content||'').toLowerCase();
-        if(t.includes(q)||c.includes(q)) out.push({mk:m.key,mn:m.name,id:x.id,t:x.title,m:(x.note||x.content||x.category||'').slice(0,40)});
+        const t=(x.title||''), c=(x.note||x.content||'');
+        const tags=(x.tags||[]).join(' ');
+        const hit=t.toLowerCase().includes(q)||c.toLowerCase().includes(q)||tags.toLowerCase().includes(q)||(x.category||'').toLowerCase().includes(q)||(x.date||'').includes(q);
+        if(hit) out.push({mk:m.key,mn:m.name,id:x.id,t:t,m:(x.date? x.date+' · ':'')+((x.note||x.content||x.category||x.tags?.join(' ')||'').slice(0,40))});
       }); });
+      // 心情/健康事件也进搜索
+      const mood=data.__mood||{};
+      Object.keys(mood).forEach(k=>{
+        const v=mood[k]; if(!v) return;
+        const txt=('心情 '+v.score+'/5'+(v.tags?' '+v.tags.join(' '):''));
+        if(txt.toLowerCase().includes(q)) out.push({mk:'mood',mn:'心情',id:k,t:txt,m:k});
+      });
       return out.slice(0,30);
     }
-    function gSearchHTML(r){
+    function gSearchHTML(r, q){
       if(!r.length) return '<div class="wb-sr-item"><span class="wb-sr-t" style="color:var(--text-tertiary)">没有匹配结果</span></div>';
       const g={}; r.forEach(x=>{if(!g[x.mk])g[x.mk]={n:x.mn,i:[]};g[x.mk].i.push(x)});
-      return Object.entries(g).map(([k,v])=>'<div class="wb-sr-grp-ttl">'+esc2(v.n)+'</div>'+v.i.map(x=>'<div class="wb-sr-item" data-mk="'+x.mk+'" data-id="'+x.id+'"><span class="wb-sr-t">'+esc2(x.t)+'</span><span class="wb-sr-m">'+esc2(x.m)+'</span></div>').join('')).join('');
+      return Object.entries(g).map(([k,v])=>'<div class="wb-sr-grp-ttl">'+esc2(v.n)+' <span style="font-weight:400;text-transform:none">('+v.i.length+')</span></div>'+v.i.map(x=>'<div class="wb-sr-item" data-mk="'+x.mk+'" data-id="'+x.id+'"><span class="wb-sr-t">'+highlightText(x.t||'(无标题)',q)+'</span><span class="wb-sr-m">'+highlightText(x.m||'',q)+'</span></div>').join('')).join('');
     }
     function initSearch(){
       const inp=document.getElementById('wb-si'), dd=document.getElementById('wb-sr');
@@ -3472,7 +3491,7 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
       inp.addEventListener('focus',()=>{if(inp.value.trim())doS()});
       function doS(){
         const q=inp.value; if(!q.trim()){dd.classList.remove('show');return}
-        const r=gSearch(q); dd.innerHTML=gSearchHTML(r); dd.classList.add('show');
+        const r=gSearch(q); dd.innerHTML=gSearchHTML(r, inp.value.trim()); dd.classList.add('show');
         dd.querySelectorAll('.wb-sr-item[data-mk]').forEach(el=>el.onclick=()=>{
           dd.classList.remove('show'); inp.value=''; go(el.dataset.mk);
           setTimeout(()=>openEditor(el.dataset.mk,(data[el.dataset.mk]||[]).find(x=>x.id==el.dataset.id)),80);
