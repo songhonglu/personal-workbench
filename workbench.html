@@ -474,6 +474,12 @@
   .hcell svg { opacity:0; } .hcell.on svg { opacity:1; }
   .habit-tb .tdcol { background:var(--accent-muted); }
   .habit-tb col.todaycol { background:var(--accent-muted); }
+  .habit-tb th.futth { opacity:.4; }
+  .habit-tb .hcell.dis { opacity:.28; cursor:not-allowed; }
+  .habit-tb .hcell.dis:hover { transform:none; }
+  .habit-tb th.futth { opacity:.4; }
+  .habit-tb .hcell.dis { opacity:.28; cursor:not-allowed; }
+  .habit-tb .hcell.dis:hover { transform:none; }
 
   /* 待办清单（仪表盘式） */
   .tk-head { display:flex; align-items:center; gap:10px; margin-bottom:8px; }
@@ -1702,11 +1708,11 @@ function habitTileHTML(){
   const dnames=["一","二","三","四","五","六","日"];
   const palette=["var(--module-1)","var(--module-2)","var(--module-3)","var(--module-4)","var(--module-5)","var(--accent)"];
   const chk=icon("check",13,2.8);
-  const ths=dnames.map((d,i)=>`<th class="${i===tIdx?'tdcol':''}">${d}</th>`).join("");
+  const ths=dnames.map((d,i)=>`<th class="${i===tIdx?'tdcol':i>tIdx?'futth':''}">${d}</th>`).join("");
   const rows = items.length ? items.map((x,ri)=>{
     let cnt=0;
-    const cells=wk.map((day,i)=>{ const on=!!(x.log&&x.log[day]); if(on)cnt++;
-      return `<td class="${i===tIdx?'tdcol':''}"><span class="hcell js-habit ${on?'on':'off'}" data-id="${x.id}" data-day="${day}">${chk}</span></td>`; }).join("");
+    const cells=wk.map((day,i)=>{ const on=!!(x.log&&x.log[day])&&day<=t; if(on)cnt++; const fut=day>t;   // v1.9.8: 未来日期禁勾（显示层兜底）
+      return `<td class="${i===tIdx?'tdcol':''}"><span class="hcell js-habit ${on?'on':'off'}${fut?' dis':''}" data-id="${x.id}" data-day="${day}">${chk}</span></td>`; }).join("");
     const rate=Math.round(cnt/7*100);
     return `<tr><td class="hn"><span class="hdot" style="background:${palette[ri%palette.length]}"></span>${esc(x.title)}</td>${cells}<td class="hrate" style="color:${palette[ri%palette.length]}">${rate}%</td></tr>`;
   }).join("") : `<tr><td colspan="9" style="text-align:center;color:var(--text-tertiary);font-size:12.5px;padding:18px 0">还没有习惯，去「习惯打卡」添加吧</td></tr>`;
@@ -1859,7 +1865,9 @@ function wireHome(){
   // 习惯追踪表：点方框直接给对应日期打卡 / 取消
   $("#screen").querySelectorAll(".js-habit").forEach(el=>el.onclick=e=>{
     e.stopPropagation(); const x=(data.checkin||[]).find(i=>i.id==el.dataset.id); if(!x) return;
-    const d=el.dataset.day; x.log=x.log||{}; x.log[d]?delete x.log[d]:x.log[d]=true; persist();
+    const d=el.dataset.day;
+    if(d>today()){ const nm=["一","二","三","四","五","六","日"][(new Date(d.replace(/-/g,"/")).getDay()+6)%7]; toast("还没到周"+nm+"，到当天才能打卡哦"); return; }   // v1.9.8: 未来日期禁勾+友好提示
+    x.log=x.log||{}; x.log[d]?delete x.log[d]:x.log[d]=true; persist();
   });
   // 番茄钟控制
   const tg=$("#pomo-toggle"); if(tg) tg.onclick=()=>{ pomo.running=!pomo.running; pomoUpdate(); };
@@ -2276,6 +2284,8 @@ function ensureV2(d){
   if(!Array.isArray(d.__remindState.queue)) d.__remindState.queue=[];
   if(!Array.isArray(d.__tombstones)) d.__tombstones=[];   // v1.9.6: 持久墓碑——独立于回收站的删除记录，清空回收站不影响
   if(Array.isArray(d.remind)&&d.remind.some(x=>x&&x.type==="quick"&&x.done===true)){ const dq=d.remind.filter(x=>x&&x.type==="quick"&&x.done===true); d.remind=d.remind.filter(x=>!(x&&x.type==="quick"&&x.done===true)); dq.forEach(x=>{ const tid="remind::"+String(x.id); if(!d.__tombstones.some(t=>t&&t.id===tid)) d.__tombstones.push({id:tid,at:isoToday()}); }); if(d.__tombstones.length>1000)d.__tombstones.splice(0,d.__tombstones.length-1000); }   // v1.9.7: 已触发的快捷提醒自动清理，带墓碑防跨端复活
+  if(Array.isArray(d.checkin)) d.checkin.forEach(x=>{ if(x&&x.log){ const tk=isoToday(); Object.keys(x.log).forEach(k=>{ if(String(k)>tk) delete x.log[k]; }); } });   // v1.9.8: 清理未来日期的打卡记录（历史误勾）
+  if(Array.isArray(d.checkin)) d.checkin.forEach(x=>{ if(x&&x.log){ const tk=isoToday(); Object.keys(x.log).forEach(k=>{ if(String(k)>tk) delete x.log[k]; }); } });   // v1.9.8: 清理未来日期的打卡记录（历史误勾）
   const __alive=new Map((d.remind||[]).map(x=>[x.id,x]));
   d.__remindState.queue=d.__remindState.queue.filter(q=>q&&((q.snooze&&String(q.id||"").indexOf("s-")===0)||(q.id!=null&&__alive.get(q.id)&&+__alive.get(q.id).quick>0))); // v1.9.5 加固：真实 id 的 snooze 条目同样要求提醒仍存在且反复>0，防止"稍后再响"后删除提醒留下僵尸
   return d;
