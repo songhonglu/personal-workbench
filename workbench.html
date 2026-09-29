@@ -3977,7 +3977,37 @@ sync.startAuto(); if(sync.on) sync.pull(true).then(()=>{ if((sync.cfg().rev||0)=
   else { document.addEventListener('DOMContentLoaded', function() { setTimeout(initEnhancements, 100); }); }
 
 </script>
-<script>try{localStorage.setItem("workbench-entry",location.pathname.split("/").pop())}catch(e){}</script><script>if('serviceWorker' in navigator){var _wbReloaded=false;navigator.serviceWorker.addEventListener('controllerchange',function(){if(_wbReloaded)return;_wbReloaded=true;location.reload()});addEventListener('load',function(){navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(reg){try{reg.update()}catch(e){}return navigator.serviceWorker.ready}).then(function(reg){try{reg.active&&reg.active.postMessage({precache:location.pathname})}catch(e){}}).catch(function(){});document.addEventListener('visibilitychange',function(){if(document.hidden)return;navigator.serviceWorker.getRegistration().then(function(r){try{r&&r.update()}catch(e){}}).catch(function(){})})})}</script>
+ <script>try{localStorage.setItem("workbench-entry",location.pathname.split("/").pop())}catch(e){}</script><script>if('serviceWorker' in navigator){var _wbReloaded=false;navigator.serviceWorker.addEventListener('controllerchange',function(){if(_wbReloaded)return;_wbReloaded=true;location.reload()});addEventListener('load',function(){navigator.serviceWorker.register('sw.js',{updateViaCache:'none'}).then(function(reg){try{reg.update()}catch(e){}return navigator.serviceWorker.ready}).then(function(reg){try{reg.active&&reg.active.postMessage({precache:location.pathname})}catch(e){}}).catch(function(){});document.addEventListener('visibilitychange',function(){if(document.hidden)return;navigator.serviceWorker.getRegistration().then(function(r){try{r&&r.update()}catch(e){}}).catch(function(){})})})}</script><script>
+ // PWA 离线状态提示条
+ (function(){
+   var bar=document.createElement('div');
+   bar.id='wb-offline-bar';
+   bar.style.cssText='position:fixed;top:0;left:0;right:0;z-index:9999;text-align:center;padding:6px 0;font-size:12px;font-weight:600;transform:translateY(-100%);opacity:0;transition:transform .3s,opacity .3s';
+   document.body.appendChild(bar);
+   function show(msg,color){
+     bar.textContent=msg;
+     bar.style.background=color;
+     bar.style.color='#fff';
+     bar.style.transform='translateY(0)';
+     bar.style.opacity='1';
+   }
+   function hide(){ bar.style.transform='translateY(-100%)'; bar.style.opacity='0'; }
+   function sync(){
+     if(navigator.onLine){
+       if(bar.style.transform!=='translateY(-100%)' && bar.style.opacity==='1'){
+         show('✅ 网络已恢复，数据将自动同步','#2c4a7c');
+         setTimeout(function(){ if(navigator.onLine) hide(); },3000);
+       }
+     } else {
+       show('📡 当前离线 · 工作台可继续使用，数据保存在本地，联网后自动同步','#555');
+     }
+   }
+   window.addEventListener('online',sync);
+   window.addEventListener('offline',sync);
+   window.addEventListener('wb-sw-ready',sync);
+   setTimeout(sync,1200);
+ })();
+ </script>
 <div class="ob" id="ob">
   <div class="ob-card">
     <div class="ob-t">👋 欢迎使用我的工作台</div>
