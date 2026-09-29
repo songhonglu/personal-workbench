@@ -3518,6 +3518,79 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
       };
     }
 
+    // --- 全局快速添加面板 ---
+    function toggleQuickAdd(){
+      let panel = document.getElementById('wb-qa');
+      if (panel) { panel.remove(); return; }
+      panel = document.createElement('div');
+      panel.id = 'wb-qa';
+      panel.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,.45);z-index:50;display:flex;justify-content:center;padding-top:10vh;backdrop-filter:blur(2px)';
+      const routeHints = ['¥金额/收/支 → 记账', '#标签 或 #text → 笔记', '读完/学到 → 阅读', '默认 → 待办'];
+      panel.innerHTML =
+        '<div style="background:var(--surface-card);border-radius:14px;box-shadow:0 24px 64px rgba(0,0,0,.25);width:min(560px,92vw);padding:20px 22px">' +
+        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:12px;color:var(--text-tertiary)"><span style="font-size:15px">⚡</span> 快速添加 · 按 Enter 提交 · Esc 关闭</div>' +
+        '<input id="wb-qa-in" type="text" placeholder="例如：还房租 3200 / #灵感 新点子 / 读完《xxx》第3章" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid var(--border-input);border-radius:9px;background:var(--surface-nested);color:var(--text-primary);outline:none;box-sizing:border-box">' +
+        '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:12px">' +
+        routeHints.map(h => '<span style="font-size:10.5px;padding:3px 8px;border-radius:999px;background:var(--surface-nested);color:var(--text-tertiary);border:1px solid var(--border)">' + h + '</span>').join('') +
+        '</div></div>';
+      document.body.appendChild(panel);
+      panel.addEventListener('click', e => { if (e.target === panel) panel.remove(); });
+      const inp = panel.querySelector('#wb-qa-in');
+      inp.focus();
+      const close = () => panel.remove();
+      panel.addEventListener('keydown', e => {
+        if (e.key === 'Escape') close();
+      });
+      inp.addEventListener('keydown', e => {
+        if (e.key !== 'Enter') return;
+        e.preventDefault();
+        const text = inp.value.trim();
+        if (!text) return close();
+        quickAdd(text);
+        close();
+        render();
+      });
+    }
+    function quickAdd(text){
+      const t = today();
+      const uid = () => Date.now() + Math.floor(Math.random()*1000);
+      // 记账：¥xx / 收入/支出 数��
+      const mMoney = text.match(/^(?:支出|收入|收|支)?\s*¥?\s*(\d+(?:\.\d+)?)\s*(.*)$/);
+      const isExpense = /支出|花了|消费|买了|消费|付了/.test(text);
+      const isIncome = /收入|工资|赚了|奖金/.test(text);
+      if (mMoney && (isExpense || isIncome || mMoney[1] !== '')) {
+        if (isIncome || isExpense || /^\s*(?:支出|收入|收|支)/.test(text)) {
+          data.money = data.money || [];
+          data.money.unshift({ id: uid(), type: isIncome ? 'income' : 'expense', amount: parseFloat(mMoney[1]), title: mMoney[2] || (isIncome?'收入':'支出'), date: t, cat: '日常', ts: Date.now() });
+          toast('已记入「记账」');
+          store.save();
+          return;
+        }
+      }
+      // 笔记：#开头 或 含 "笔记"/"记一下"
+      if (text.startsWith('#') || /笔记|记一下|想法|灵感/.test(text)) {
+        data.note = data.note || [];
+        const tags = text.match(/#([^\s#]+)/g) || [];
+        const title = text.replace(/^#/,'').replace(/#\S+/g,'').trim() || '随手记';
+        data.note.unshift({ id: uid(), title: title, content: text, date: t, tags: tags.map(x=>x.slice(1)), ts: Date.now() });
+        toast('已存入「笔记」');
+        store.save();
+        return;
+      }
+      // 阅读���读完/正在读/学到
+      if (/读完|正在读|学到|书/.test(text)) {
+        data.read = data.read || [];
+        data.read.unshift({ id: uid(), title: text, progress: /读完/.test(text) ? 100 : 10, goal: 100, ts: Date.now(), date: t });
+        toast('已加入「阅读」');
+        store.save();
+        return;
+      }
+      // 默认：待办
+      data.todo = data.todo || [];
+      data.todo.unshift({ id: uid(), title: text, done: false, date: t, ts: Date.now() });
+      toast('已加入「待办」');
+      store.save();
+    }
     // --- 键盘快捷键 ---
     function initKeys(){
       document.addEventListener('keydown', e => {
@@ -3533,9 +3606,14 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
           const idx = parseInt(e.key) - 1;
           if (mods[idx]) { go(mods[idx].key); e.preventDefault(); return; }
         }
-        // n/N: 新建
+        // n/N: 打开全局快速添加面板（Cmd/Ctrl+N）或在模块内新建
         if (e.key === 'n' || e.key === 'N') {
-          if (view !== 'home' && view !== 'insight') { openEditor(view, null); }
+          if (e.ctrlKey || e.metaKey) {
+            e.preventDefault();
+            toggleQuickAdd();
+            return;
+          }
+          if (view !== 'home' && view !== 'insight' && view !== 'timeline' && view !== 'changelog') { openEditor(view, null); }
           return;
         }
         // /: 聚焦搜索
@@ -3572,7 +3650,7 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
       // v1.13.0: 快捷键提示 tooltip
       const hint=document.createElement('div');
       hint.style.cssText='position:fixed;bottom:8px;right:12px;font-size:10.5px;color:var(--text-tertiary);opacity:.6;z-index:5;pointer-events:none';
-      hint.textContent='1-8 模块 · N 新建 · / 搜索 · Space 番茄钟 · G 首页 · I 洞察';
+       hint.textContent='Cmd/Ctrl+N 快速添加 · 1-8 模块 · N 新建 · / 搜索 · Space 番茄钟 · G 首页 · I 洞察';
       document.body.appendChild(hint);
     }
 
