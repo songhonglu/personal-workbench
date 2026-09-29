@@ -1104,8 +1104,11 @@
         <button class="foot-btn" id="btnExport" type="button">导出备份</button>
         <button class="foot-btn" id="btnBak" type="button">自动备份</button>
         <button class="foot-btn" id="btnImport" type="button">导入恢复</button>
+        <button class="foot-btn" id="btnCsv" type="button">CSV 导出</button>
+        <button class="foot-btn" id="btnCsvIn" type="button">CSV 导入</button>
       </div>
       <input type="file" id="importFile" accept="application/json,.json" hidden/>
+      <input type="file" id="csvImportFile" accept=".csv,text/csv" hidden/>
     </div>
   </aside>
   <!-- main -->
@@ -3365,6 +3368,46 @@ $("#btnExport").onclick=exportData;
 $("#btnImport").onclick=()=>$("#importFile").click();
 $("#importFile").onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(f) importData(f); e.target.value=""; };
 $("#btnSync").onclick=()=>sync.openPanel();
+/* v1.13.0: CSV 导出/导入 */
+$("#btnCsv").onclick=()=>{
+  const lines=[["模块","类型","标题","内容/备注","日期","金额","完成","进度","分类","标签"]];
+  const add=(mk,type,row)=>lines.push(row);
+  (data.todo||[]).forEach(x=>add("todo","待办",[mk2("todo"),"todo",x.title,x.note||"",x.date||"",x.done?"✓":"",x.repeat?("🔁"+x.repeat):""]));
+  (data.money||[]).forEach(x=>add("money","记账",[mk2("money"),"money",x.title||"",x.note||"",x.date||"",x.type==="income"?x.amount:-x.amount,"",x.category||"",""]));
+  (data.note||[]).forEach(x=>add("note","笔记",[mk2("note"),"note",x.title||"",(x.content||"").slice(0,200),x.date||"","","","",(x.tags||[]).join("|")]));
+  (data.read||[]).forEach(x=>add("read","阅读",[mk2("read"),"read",x.title||"",x.note||"",x.date||"",x.current||0,x.target||0,x.progress!=null?Math.round(x.progress)+"%":"",x.habitId?"🔗":"" ]));
+  const csv=lines.map(r=>r.map(c=>'"'+String(c??"").replace(/"/g,'""')+'"').join(",")).join("\n");
+  const blob=new Blob(["\uFEFF"+csv],{type:"text/csv;charset=utf-8"});
+  const a=document.createElement("a"); a.href=URL.createObjectURL(blob);
+  a.download=`workbench-csv-${isoToday()}.csv`; document.body.appendChild(a); a.click(); a.remove();
+  URL.revokeObjectURL(a.href); toast("已导出 CSV 文件");
+};
+function mk2(k){ return {todo:"待办",money:"记账",note:"笔记",read:"阅读",checkin:"习惯",progress:"目标",focus:"专注",remind:"提醒"}[k]||k; }
+$("#btnCsvIn").onclick=()=>$("#csvImportFile").click();
+$("#csvImportFile").onchange=e=>{
+  const f=e.target.files&&e.target.files[0]; if(!f) return;
+  const r=new FileReader();
+  r.onload=()=>{
+    try{
+      const lines=String(r.result).split(/\r?\n/).filter(l=>l.trim());
+      if(lines.length<2) { toast("CSV 无数据行"); return; }
+      const header=lines[0].split(",");
+      const idx={}; header.forEach((h,i)=>idx[h.trim().replace(/^"|"$/g,"")]=i);
+      let cnt=0;
+      lines.slice(1).forEach(l=>{
+        const cells=l.match(/"((?:[^"]|"")*)"/g)||[];
+        const get=col=>{ const i=idx[col]; if(i==null||i>=cells.length) return ""; return cells[i].replace(/^"|"$/g,"").replace(/""/g,'"'); };
+        const mod=get("模块"), title=get("标题"), date=get("日期"), amt=parseFloat(get("金额"))||0, note=get("内容/备注"), tag=get("标签");
+        const uid=()=>Date.now()+Math.floor(Math.random()*9999);
+        if(mod==="待办"&&title){ data.todo=data.todo||[]; data.todo.push({id:uid(),title,done:!!get("完成"),date:date||isoToday(),note,ts:Date.now()}); cnt++; }
+        else if(mod==="记账"&&title){ data.money=data.money||[]; data.money.push({id:uid(),type:amt>0?"income":"expense",amount:Math.abs(amt),title,note,date:date||isoToday(),category:get("分类")||"日常",ts:Date.now()}); cnt++; }
+        else if(mod==="笔记"&&title){ data.note=data.note||[]; data.note.push({id:uid(),title,content:note,date:date||isoToday(),tags:tag?tag.split("|").map(s=>s.trim()).filter(Boolean):[],ts:Date.now()}); cnt++; }
+      });
+      store.save(); render(); toast("CSV 导入成功，新增 "+cnt+" 条记录");
+    }catch(err){ toast("CSV 解析失败："+err.message); }
+  };
+  r.readAsText(f); e.target.value="";
+};
 
 /* ---------- 自动备份：每日滚动快照（v1.9.4，静默运行，零交互） ---------- */
 /* • 每次 saveLocal 后自动比对：当天已有快照且内容未变则跳过，变了才写入
