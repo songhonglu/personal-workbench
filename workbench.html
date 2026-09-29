@@ -2375,6 +2375,32 @@ function remTick(){
   }
 }
 
+/* ---------- 更新日志 ---------- */
+const APP_VERSION="1.10.0";
+const CHANGELOG=[
+  {v:"1.10.0",date:"2026-09-29",title:"勾选局部更新 + 更新日志模块",fixes:["待办/习惯勾选不再整页刷新，改为局部 DOM 更新","新增「更新日志」页面，记录版本迭代","新增 persistOnly() 分离存储与渲染"]},
+  {v:"1.9.9",date:"2026-09-29",title:"桌面首页空间压缩",fixes:["bento/tile/clock-card 间距与内边距全面缩减","消除首页纵向滚动，节省 ~200px"]},
+  {v:"1.9.8",date:"2026-09-29",title:"习惯追踪表未来日期禁勾",fixes:["今天之后日期不可勾选","友好提示「还没到周X，到当天才能打卡哦」","清理历史误勾的未来打卡记录"]},
+  {v:"1.9.7",date:"2026-09-29",title:"提醒中心统计一致性",fixes:["「共 X 条」改为可见条数，修复空列表显示 1 条","已触发快捷提醒自动清理"]},
+  {v:"1.9.6",date:"2026-09-29",title:"持久墓碑与强制同步",fixes:["删除记录跨端传播——清空回收站不丢删除","墓碑参与三端合并"]},
+  {v:"1.9.5",date:"2026-09-29",title:"同步墓碑机制",fixes:["删除条目不再被远端合并复活"]},
+];
+function renderChangelog(){
+  const rows=CHANGELOG.map(c=>{
+    const dots=c.fixes.map(f=>`<li>${esc(f)}</li>`).join("");
+    return `<div style="background:var(--surface-card);border:1px solid var(--border);border-radius:var(--radius-card);box-shadow:var(--shadow-card);padding:14px 20px">
+      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
+        <span style="font-size:12.5px;font-weight:800;color:var(--accent);background:var(--accent-muted);padding:2px 10px;border-radius:20px;flex:0 0 auto">v${c.v}</span>
+        <span style="font-size:14px;font-weight:700">${esc(c.title)}</span>
+        <span style="margin-left:auto;font-size:12px;color:var(--text-tertiary);flex:0 0 auto">${c.date}</span>
+      </div>
+      <ul style="margin:0;padding-left:18px;font-size:13px;color:var(--text-secondary);line-height:1.7">${dots}</ul>
+    </div>`;
+  }).join("");
+  $("#screen").innerHTML=`<div class="header"><div><h2>更新日志</h2><p>当前版本 v${APP_VERSION} · 记录每次迭代与改进</p></div><div class="spacer"></div><span class="date-chip">${icon("activity",14)} ${CHANGELOG.length} 个版本</span></div>
+    <div style="display:flex;flex-direction:column;gap:10px">${rows}</div>`;
+}
+
 /* ---------- router / sidebar ---------- */
 function dateStr(){ const n=new Date(); const wd="日一二三四五六"[n.getDay()]; return `${n.getFullYear()}年${n.getMonth()+1}月${n.getDate()}日 周${wd}`; }
 function go(v){ view=v; searchQ=""; renderNavActive(); render(); window.scrollTo({top:0}); }
