@@ -415,6 +415,10 @@
   .ov2-stat { position:relative; z-index:1; display:flex; align-items:center; gap:13px; cursor:pointer;
     padding:12px 4px; border-radius:var(--radius-tile); transition:background .15s; }
   .ov2-stat:hover { background:rgba(244,243,240,.06); }
+  @keyframes wbflash { 0%,100%{box-shadow:0 0 0 0 transparent} 40%{box-shadow:0 0 0 3px var(--accent-muted)} }
+  .flash { animation:wbflash 1s ease 1; border-radius:10px; }
+  @keyframes wbflash { 0%,100%{box-shadow:0 0 0 0 transparent} 40%{box-shadow:0 0 0 3px var(--accent-muted)} }
+  .flash { animation:wbflash 1s ease 1; border-radius:10px; }
   .ov2-stat + .ov2-stat { border-top:1px solid rgba(244,243,240,.09); }
   .ov2-stat .s-ic { width:40px; height:40px; border-radius:12px; display:grid; place-items:center; flex:0 0 auto;
     background:rgba(244,243,240,.08); box-shadow:inset 0 0 0 1px rgba(244,243,240,.1); }
@@ -1385,6 +1389,7 @@ const sync = {
    },
   async push(){
     if(!this.on || this._busy) return; this._busy=true; this.badge("同步中…");
+    try{ ensureV2(data); }catch(_e){}   // v1.9.5: push 前清理反复队列僵尸条目，保证上传数据干净
     try {
       const res = await fetch(this._url("/data"), { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ data }) });
       if(!res.ok) throw new Error("HTTP "+res.status);
@@ -1412,10 +1417,66 @@ const sync = {
       } else if(!silent){ toast("本地已是最新"); }
     } catch(e){ if(!silent) toast("拉取失败："+e.message); this.badge("同步失败"); console.warn("[sync] pull:", e); }
   },
+  async forcePush(){   // v1.9.6: 用本机整体覆盖云端（同步分歧收敛逃生舱）
+    if(!this.on){ toast("未开启同步"); return; }
+    if(this._busy) return; this._busy=true; this.badge("覆盖中…");
+    try{
+      try{ ensureV2(data); }catch(_e){}
+      const res=await fetch(this._url("/data"),{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({data})});
+      if(!res.ok) throw new Error("HTTP "+res.status);
+      const r=await res.json().catch(()=>({}));
+      if(r.rev!=null) this.set("rev",r.rev); if(r.updatedAt) this.set("updatedAt",r.updatedAt);
+      this.set("lastSync",Date.now()); this._saveBase(data); this.badge("已同步"); toast("已用本机数据覆盖云端");
+    }catch(e){ this.badge("同步失败"); toast("覆盖失败："+e.message); console.warn("[sync] forcePush:",e); }
+    finally{ this._busy=false; }
+  },
+  async forcePull(){   // v1.9.6: 用云端整体覆盖本机（同步分歧收敛逃生舱）
+    if(!this.on){ toast("未开启同步"); return; }
+    if(this._busy) return; this._busy=true; this.badge("拉取中…");
+    try{
+      const res=await fetch(this._url("/data"),{method:"GET"});
+      if(!res.ok) throw new Error("HTTP "+res.status);
+      const r=await res.json().catch(()=>({}));
+      if(!r||r.data==null) throw new Error("云端暂无数据");
+      try{ bak.save(JSON.stringify(data)); }catch(_e){}   // 覆盖前自动快照，可从备份恢复撤销
+      data=r.data; ensureV2(data); autoTrend(); store.saveLocal();
+      if(r.rev!=null) this.set("rev",r.rev); if(r.updatedAt) this.set("updatedAt",r.updatedAt);
+      this.set("lastSync",Date.now()); this._saveBase(data); render(); this.badge("已同步"); toast("已用云端数据覆盖本机");
+    }catch(e){ this.badge("同步失败"); toast("覆盖失败："+e.message); console.warn("[sync] forcePull:",e); }
+    finally{ this._busy=false; }
+  },
+  async forcePush(){   // v1.9.6: 用本机整体覆盖云端（同步分歧收敛逃生舱）
+    if(!this.on){ toast("未开启同步"); return; }
+    if(this._busy) return; this._busy=true; this.badge("覆盖中…");
+    try{
+      try{ ensureV2(data); }catch(_e){}
+      const res=await fetch(this._url("/data"),{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({data})});
+      if(!res.ok) throw new Error("HTTP "+res.status);
+      const r=await res.json().catch(()=>({}));
+      if(r.rev!=null) this.set("rev",r.rev); if(r.updatedAt) this.set("updatedAt",r.updatedAt);
+      this.set("lastSync",Date.now()); this._saveBase(data); this.badge("已同步"); toast("已用本机数据覆盖云端");
+    }catch(e){ this.badge("同步失败"); toast("覆盖失败："+e.message); console.warn("[sync] forcePush:",e); }
+    finally{ this._busy=false; }
+  },
+  async forcePull(){   // v1.9.6: 用云端整体覆盖本机（同步分歧收敛逃生舱）
+    if(!this.on){ toast("未开启同步"); return; }
+    if(this._busy) return; this._busy=true; this.badge("拉取中…");
+    try{
+      const res=await fetch(this._url("/data"),{method:"GET"});
+      if(!res.ok) throw new Error("HTTP "+res.status);
+      const r=await res.json().catch(()=>({}));
+      if(!r||r.data==null) throw new Error("云端暂无数据");
+      try{ bak.save(JSON.stringify(data)); }catch(_e){}   // 覆盖前自动快照，可从备份恢复撤销
+      data=r.data; ensureV2(data); autoTrend(); store.saveLocal();
+      if(r.rev!=null) this.set("rev",r.rev); if(r.updatedAt) this.set("updatedAt",r.updatedAt);
+      this.set("lastSync",Date.now()); this._saveBase(data); render(); this.badge("已同步"); toast("已用云端数据覆盖本机");
+    }catch(e){ this.badge("同步失败"); toast("覆盖失败："+e.message); console.warn("[sync] forcePull:",e); }
+    finally{ this._busy=false; }
+  },
   _baseKey(){ return SYNC_KEY+"::base"; },
   _saveBase(d){ try{ storage.setItem(this._baseKey(), JSON.stringify(d)); }catch(e){} },
   _base(){ try{ const s=storage.getItem(this._baseKey()); return s?JSON.parse(s):null; }catch(e){ return null; } },
-  _mergeKey(L,R,B){
+  _mergeKey(L,R,B,dead){
     if(Array.isArray(L)&&Array.isArray(R)){
       if(L.some(i=>!i||i.id==null)||R.some(i=>!i||i.id==null)) return L;
       const Bm={};(B||[]).forEach(i=>{ if(i&&i.id!=null) Bm[i.id]=i; });
@@ -1423,7 +1484,8 @@ const sync = {
       const Rm={}; R.forEach(i=>{ Rm[i.id]=i; });
       const ids=order.slice(); Object.keys(Rm).forEach(id=>{ if(!(id in Lm)) ids.push(id); });
       const out=[];
-      ids.forEach(id=>{ const b=Bm[id],l=Lm[id],r=Rm[id];
+      ids.forEach(id=>{ if(dead&&dead.has(String(id))) return;   // v1.9.5: 墓碑跳过——任一端回收站里删过的条目不再合并回来（否则删除会被当作"远端新增"复活）
+        const b=Bm[id],l=Lm[id],r=Rm[id];
         if(l&&r){ const lc=!b||JSON.stringify(l)!==JSON.stringify(b); const rc=!b||JSON.stringify(r)!==JSON.stringify(b); out.push(rc&&!lc?r:l); }
         else if(l) out.push(l); else if(r) out.push(r); });
       return out;
@@ -1431,14 +1493,21 @@ const sync = {
     return R;
   },
   mergeData(remote){
-    const base=this._base(); if(!base) return remote;
+    const base=this._base();
+    if(!base){ remote.__remindState=data.__remindState||{fired:{},queue:[]}; return remote; }   // v1.9.5: 无 base 整替时，反复队列等运行时状态仍以本地为准
     try{
       const merged={}; const keys=new Set([...Object.keys(remote),...Object.keys(data)]);
+      keys.delete("__remindState");   // v1.9.5: 反复队列/fired 是运行时状态，参与合并会把已清空的僵尸条目从旧设备带回来
+      const deadByMod={};   // v1.9.5: 墓碑索引——三端回收站中出现过的软删除 (module,id) 一律视为已删，删除操作才能跨端传播
+      [data.__trash, remote.__trash, base.__trash].forEach(t=>{ (t||[]).forEach(i=>{ if(i&&i.id!=null&&i.__module){ (deadByMod[i.__module]=deadByMod[i.__module]||new Set()).add(String(i.id)); } }); });
+      [data.__tombstones, remote.__tombstones, base.__tombstones].forEach(t=>{ (t||[]).forEach(i=>{ if(i&&i.id&&String(i.id).indexOf("::")>0){ const p=String(i.id).split("::"); (deadByMod[p[0]]=deadByMod[p[0]]||new Set()).add(p.slice(1).join("::")); } }); });   // v1.9.6: 持久墓碑参与合并——清空过回收站的删除也能传播
+      [data.__tombstones, remote.__tombstones, base.__tombstones].forEach(t=>{ (t||[]).forEach(i=>{ if(i&&i.id&&String(i.id).indexOf("::")>0){ const p=String(i.id).split("::"); (deadByMod[p[0]]=deadByMod[p[0]]||new Set()).add(p.slice(1).join("::")); } }); });   // v1.9.6: 持久墓碑参与合并——清空过回收站的删除也能传播
       keys.forEach(k=>{ const L=data[k],R=remote[k],B=base[k];
         const lc=JSON.stringify(L)!==JSON.stringify(B), rc=JSON.stringify(R)!==JSON.stringify(B);
-        if(!rc) merged[k]=L; else if(!lc) merged[k]=R; else merged[k]=this._mergeKey(L,R,B); });
+        if(!rc) merged[k]=L; else if(!lc) merged[k]=R; else merged[k]=this._mergeKey(L,R,B,deadByMod[k]); });
+      merged.__remindState=data.__remindState||{fired:{},queue:[]};   // v1.9.5: 内部状态始终以本地为准
       console.info("[sync] 字段级合并完成"); return merged;
-    }catch(e){ console.warn("[sync] 合并失败, 回退整替:", e); return remote; }
+    }catch(e){ console.warn("[sync] 合并失败, 回退整替:", e); remote.__remindState=data.__remindState||{fired:{},queue:[]}; return remote; }
   },
   async now(){ await this.pull(false); await this.push(); },
   fmtLast(){ const t=this.cfg().lastSync; if(!t) return "—"; try { return new Date(t).toLocaleString("zh-CN",{hour12:false}); } catch(e){ return "—"; } },
@@ -1457,6 +1526,11 @@ function openSyncPanel(){
       <div class="field"><label>同步令牌 Token</label><input id="sy-token" class="sy-input" placeholder="自定义一段足够长的随机密钥" value="${attr(c.token||"")}"/></div>
       <div class="sy-status" id="sy-status">${ sync.on ? ("已连接 · 上次同步：" + sync.fmtLast()) : "尚未启用同步" }</div>
       <div class="sub" style="margin:8px 0 0">后端怎么搭？见技能文档 <b>reference/sync.md</b>（Node / Python 任选，零依赖）。</div>
+      <div class="sub" style="margin:10px 0 0">两端数据有分歧时强制对齐（整体覆盖另一端，谨慎使用）：</div>
+      <div class="modal-actions" style="margin-top:6px">
+        <button class="btn ghost" id="sy-fpush">用本机覆盖云端</button>
+        <button class="btn ghost" id="sy-fpull">用云端覆盖本机</button>
+      </div>
       <div class="modal-actions">
         <button class="link-danger" id="sy-disconnect" ${sync.on?"":"style=\"display:none\""}>断开</button>
         <div class="spacer"></div>
@@ -1481,6 +1555,8 @@ function openSyncPanel(){
     const b=document.getElementById("syncBadge"); if(b) b.textContent="未启用同步";
     close(); toast("已断开同步");
   };
+  overlay.querySelector("#sy-fpush").onclick = ()=>{ if(!confirm("确定用本机数据覆盖云端？云端现有数据将被整体替换。")) return; close(); sync.forcePush(); };
+  overlay.querySelector("#sy-fpull").onclick = ()=>{ if(!confirm("确定用云端数据覆盖本机？本机现有数据将被整体替换（覆盖前会自动快照，可从备份恢复）。")) return; close(); sync.forcePull(); };
 }
 
 let data = store.load();
@@ -1602,7 +1678,7 @@ function quickTileHTML(){
 /* 今日概览（环形 + 深色统计侧栏，合并原「整体情况」独有指标） */
 function overviewTileHTML(){
   const rings = CONFIG.overview.map(o=>{ const r=o.calc(data);
-    return `<div class="ring" data-open="${o.key}"><div class="dial">${ringSVG(r.value,o.color)}<span class="mid" style="color:${o.color}">${icon(o.icon,26)}</span></div>
+    return `<div class="ring" data-open="${o.key}" title="点击查看${o.label}全部记录"><div class="dial">${ringSVG(r.value,o.color)}<span class="mid" style="color:${o.color}">${icon(o.icon,26)}</span></div>
       <div class="pct">${r.value}%</div><div class="lbl">${o.label}</div><div class="sub">${r.sub}</div></div>`; }).join("");
   const recCount=CONFIG.modules.reduce((s,m)=>s+((Array.isArray(data[m.key])?data[m.key]:[]).length),0);
   const pinCount=CONFIG.modules.reduce((s,m)=>s+((Array.isArray(data[m.key])?data[m.key]:[]).filter(x=>x.pinned).length),0);
@@ -1614,9 +1690,9 @@ function overviewTileHTML(){
     <div class="ov2-body">
       <div class="rings">${rings}</div>
       <div class="ov2-side">
-        <div class="ov2-stat" data-open="note"><span class="s-ic" style="color:var(--module-2)">${icon("chart",17)}</span><div class="s-tx"><div class="s-v">${recCount}</div><div class="s-l">累计记录条数</div></div></div>
-        <div class="ov2-stat"><span class="s-ic" style="color:var(--module-3)">${icon("star",17)}</span><div class="s-tx"><div class="s-v">${pinCount}</div><div class="s-l">置顶要事</div></div></div>
-        <div class="ov2-stat" data-open="money"><span class="s-ic" style="color:${balCol}">${icon("wallet",17)}</span><div class="s-tx"><div class="s-v" style="color:${balCol}">¥${bal}</div><div class="s-l">本月结余 · 收¥${inc} 支¥${exp}</div></div></div>
+        <div class="ov2-stat" data-open="insight" title="点击查看洞察复盘"><span class="s-ic" style="color:var(--module-2)">${icon("chart",17)}</span><div class="s-tx"><div class="s-v">${recCount}</div><div class="s-l">累计记录条数</div></div></div>
+        <div class="ov2-stat" data-goto-pin title="定位到今日聚焦"><span class="s-ic" style="color:var(--module-3)">${icon("star",17)}</span><div class="s-tx"><div class="s-v">${pinCount}</div><div class="s-l">置顶要事</div></div></div>
+        <div class="ov2-stat" data-open="money" title="点击查看记账本明细"><span class="s-ic" style="color:${balCol}">${icon("wallet",17)}</span><div class="s-tx"><div class="s-v" style="color:${balCol}">¥${bal}</div><div class="s-l">本月结余 · 收¥${inc} 支¥${exp}</div></div></div>
       </div>
     </div></div>`;
 }
@@ -1755,6 +1831,20 @@ function renderHome(){
 
 function wireHome(){
   $("#screen").querySelectorAll("[data-open]").forEach(el=>el.onclick=()=>go(el.dataset.open));
+  // v1.9.4：概览「置顶要事」点击 → 平滑定位到今日聚焦卡片并高亮
+  $("#screen").querySelectorAll("[data-goto-pin]").forEach(el=>el.onclick=()=>{
+    const f=$("#screen").querySelector(".pin-list, .focus-empty");
+    if(!f) return;
+    f.scrollIntoView({behavior:"smooth",block:"center"});
+    f.classList.add("flash"); setTimeout(()=>f.classList.remove("flash"),1100);
+  });
+  // v1.9.4：概览「置顶要事」点击 → 平滑定位到今日聚焦卡片并高亮
+  $("#screen").querySelectorAll("[data-goto-pin]").forEach(el=>el.onclick=()=>{
+    const f=$("#screen").querySelector(".pin-list, .focus-empty");
+    if(!f) return;
+    f.scrollIntoView({behavior:"smooth",block:"center"});
+    f.classList.add("flash"); setTimeout(()=>f.classList.remove("flash"),1100);
+  });
   $("#screen").querySelectorAll("[data-quick]").forEach(el=>el.onclick=()=>{ go(el.dataset.quick); openEditor(el.dataset.quick,null); });
   const find=el=>(data[el.dataset.mkey]||[]).find(i=>i.id==el.dataset.id);
   // 就地打卡 / 完成
@@ -2146,16 +2236,20 @@ function trashModName(k){ const m=CONFIG.modules.find(x=>x.key===k); return m?m.
 function restoreTrash(mk,id){
   const tr=data.__trash||[]; const i=tr.findIndex(t=>t.id==id&&t.__module===mk); if(i<0)return;
   const item=tr[i]; tr.splice(i,1); delete item.__module; delete item.__deletedAt;
+  data.__tombstones=(data.__tombstones||[]).filter(t=>t.id!==mk+"::"+id);   // v1.9.6: 恢复即撤销墓碑，条目可重新参与同步
   if(!data[mk]) data[mk]=[]; data[mk].unshift(item); persist(); toast("已恢复到「"+trashModName(mk)+"」");
 }
 function purgeTrash(mk,id){ data.__trash=(data.__trash||[]).filter(t=>!(t.id==id&&t.__module===mk)); persist(); }
 function confirmDelete(key,id){
   const list=data[key]||[]; const idx=list.findIndex(i=>i.id==id); if(idx<0) return;
   const item=list[idx];
-  list.splice(idx,1); data.__trash=(data.__trash||[]); data.__trash.unshift(Object.assign({},item,{__module:key,__deletedAt:isoToday()})); if(data.__trash.length>200)data.__trash.length=200; persist();   // v1.5 软删除进回收站，30 天内可恢复
+  list.splice(idx,1); data.__trash=(data.__trash||[]); data.__trash.unshift(Object.assign({},item,{__module:key,__deletedAt:isoToday()})); if(data.__trash.length>200)data.__trash.length=200;
+  if(key==="remind"){ const st=remState(); st.queue=st.queue.filter(q=>q.id!=id); } // v1.9.3 修复：删除提醒时同步清掉反复队列条目
+  data.__tombstones=(data.__tombstones||[]).filter(t=>t.id!==key+"::"+id); data.__tombstones.push({id:key+"::"+id,at:isoToday()}); if(data.__tombstones.length>1000)data.__tombstones.splice(0,data.__tombstones.length-1000);   // v1.9.6: 持久墓碑——独立于回收站，清空回收站不丢删除记录，删除可跨端传播
+  persist();   // v1.5 软删除进回收站，30 天内可恢复
   toast("已删除「"+String(item.title||'这条记录').slice(0,18)+"」", { label:"撤销", fn:()=>{
     if(!data[key]) data[key]=[];
-    if(!data[key].some(i=>i.id==id)){ data[key].splice(Math.min(idx,data[key].length),0,item); } data.__trash=(data.__trash||[]).filter(t=>!(t.id==id&&t.__module==key)); persist();
+    if(!data[key].some(i=>i.id==id)){ data[key].splice(Math.min(idx,data[key].length),0,item); } data.__trash=(data.__trash||[]).filter(t=>!(t.id==id&&t.__module==key)); data.__tombstones=(data.__tombstones||[]).filter(t=>t.id!==key+"::"+id); persist();
   }});
 }
 
@@ -2181,6 +2275,10 @@ function ensureV2(d){
   if(!d.__remindState||typeof d.__remindState!=="object") d.__remindState={fired:{},queue:[]};
   if(!d.__remindState.fired) d.__remindState.fired={};
   if(!Array.isArray(d.__remindState.queue)) d.__remindState.queue=[];
+  if(!Array.isArray(d.__tombstones)) d.__tombstones=[];   // v1.9.6: 持久墓碑——独立于回收站的删除记录，清空回收站不影响
+  if(!Array.isArray(d.__tombstones)) d.__tombstones=[];   // v1.9.6: 持久墓碑——独立于回收站的删除记录，清空回收站不影响
+  const __alive=new Map((d.remind||[]).map(x=>[x.id,x]));
+  d.__remindState.queue=d.__remindState.queue.filter(q=>q&&((q.snooze&&String(q.id||"").indexOf("s-")===0)||(q.id!=null&&__alive.get(q.id)&&+__alive.get(q.id).quick>0))); // v1.9.5 加固：真实 id 的 snooze 条目同样要求提醒仍存在且反复>0，防止"稍后再响"后删除提醒留下僵尸
   return d;
 }
 function pomoToday(){ const P=data.__pomo; if(!P.today||P.today.date!==isoToday()) P.today={date:isoToday(),count:0,min:0}; return P.today; }
@@ -2188,7 +2286,7 @@ function pomoToday(){ const P=data.__pomo; if(!P.today||P.today.date!==isoToday(
 /* ---------- 响铃引擎（WebAudio 循环音 + 顶部横幅 + 标题闪烁） ---------- */
 const QUICK_OPTS=[{m:5,l:"5 分钟"},{m:10,l:"10 分钟"},{m:15,l:"15 分钟"},{m:30,l:"30 分钟"},{m:45,l:"45 分钟"},{m:60,l:"1 小时"},{m:120,l:"2 小时"}];
 const QUICK_LABEL={0:"不反复",5:"每 5 分钟",10:"每 10 分钟",15:"每 15 分钟",30:"每 30 分钟",45:"每 45 分钟",60:"每 1 小时",120:"每 2 小时"};
-let ringCtx=null, ringTone=null, ringTitleBak=null, ringActive=null;
+let ringCtx=null, ringTone=null, ringTitleBak=null, ringActive=null, ringActiveQ=null; // ringActiveQ: 当前响铃的队列条目引用，"知道了"靠它终止反复
 document.addEventListener("click",()=>{ if(ringCtx&&ringCtx.state==="suspended") ringCtx.resume(); },{passive:true});
 function ringBeepOn(){
   try{
@@ -2203,8 +2301,8 @@ function ringBeepOn(){
   }catch(e){}
 }
 function ringBeepOff(){ try{ if(ringTone){ clearInterval(ringTone.timer); ringTone.o.stop(); ringTone=null; } }catch(e){} }
-function ringShow(it){
-  ringActive=it;
+function ringShow(it,qEntry){
+  ringActive=it; ringActiveQ=qEntry||null;
   if(!ringTitleBak) ringTitleBak=document.title;
   document.title="⏰ "+(it.title||"提醒");
   if(navigator.vibrate) try{ navigator.vibrate([300,150,300]); }catch(e){}
@@ -2213,8 +2311,14 @@ function ringShow(it){
     b=document.createElement("div"); b.id="ringBanner"; b.className="ring-banner";
     b.innerHTML='<div class="rb-ic">'+icon("bell",20)+'</div><div class="rb-body"><div class="rb-t"></div><div class="rb-m"></div></div><div class="rb-acts"><button class="rb-btn ghost" id="rb-later">稍后再响</button><button class="rb-btn" id="rb-stop">知道了</button></div>';
     document.body.appendChild(b);
-    b.querySelector("#rb-stop").onclick=()=>ringHide();
-    b.querySelector("#rb-later").onclick=()=>{ const st=remState(); st.queue.push({title:it.title||"提醒",nextAt:Date.now()+5*60000,quick:5}); ringHide(); toast("已延后 5 分钟再响"); };
+    b.querySelector("#rb-stop").onclick=()=>{ // v1.9.3 修复：知道了要终止队列反复，而不是只隐藏横幅
+      if(ringActiveQ){ const st=remState(); st.queue=st.queue.filter(x=>x!==ringActiveQ); store.saveLocal(); }
+      ringActiveQ=null; ringHide(); };
+    b.querySelector("#rb-later").onclick=()=>{ // v1.9.3 修复：延后条目带 snooze 标记只响一次，并替换当前周期避免双重响铃
+      const st=remState(); const t=(ringActive&&ringActive.title)||"提醒";
+      if(ringActiveQ){ st.queue=st.queue.filter(x=>x!==ringActiveQ); }
+      st.queue.push({id:(ringActive&&ringActive.id)||("s-"+Date.now()),title:t,nextAt:Date.now()+5*60000,quick:5,snooze:true});
+      ringActiveQ=null; ringHide(); toast("已延后 5 分钟再响"); };
   }
   b.querySelector(".rb-t").textContent=it.title||"提醒";
   b.querySelector(".rb-m").textContent=it.sub||"时间到了";
@@ -2225,7 +2329,7 @@ function fireRemind(it,tag,sub){
   const st=remState(); if(st.fired[tag]) return; st.fired[tag]=1;
   ringShow(Object.assign({},it,{sub:sub||it.sub}));
   if(it.type==="quick"){ it.done=true; it.enabled=false; }
-  if(+it.quick>0) st.queue.push({id:it.id,title:it.title,nextAt:Date.now()+it.quick*60000,quick:+it.quick});
+  if(+it.quick>0){ const qe={id:it.id,title:it.title,nextAt:Date.now()+it.quick*60000,quick:+it.quick}; st.queue.push(qe); ringActiveQ=qe; } // v1.9.3：记录队列引用，首次响铃点"知道了"即可终止
   store.saveLocal();
 }
 function remState(){ ensureV2(data); return data.__remindState; }
@@ -2236,8 +2340,8 @@ function remTick(){
   const st=remState();
   st.queue=st.queue.filter(q=>{
     if(Date.now()>=q.nextAt){
-      ringShow({title:q.title||"提醒",sub:"反复提醒 · 到点啦"});
-      if(q.quick>0){ q.nextAt=Date.now()+q.quick*60000; return true; }
+      ringShow(Object.assign({},q,{sub:"反复提醒 · 到点啦"}),q);
+      if(q.quick>0&&!q.snooze){ q.nextAt=Date.now()+q.quick*60000; return true; } // v1.9.3：snooze 延后条目只响一次，不再自我续期
       return false;
     }
     return true;
@@ -2357,7 +2461,9 @@ function renderRemind(){
   });
   $("#screen").querySelectorAll(".js-rem-toggle").forEach(el=>el.onchange=()=>{
     const it=(data.remind||[]).find(x=>x.id==el.dataset.id); if(!it) return;
-    it.enabled=el.checked; if(el.checked) delete it.done; persist();
+    it.enabled=el.checked; if(el.checked) delete it.done;
+    if(!el.checked){ const st=remState(); st.queue=st.queue.filter(q=>q.id!=it.id); } // v1.9.3 修复：停用提醒时清掉反复队列条目
+    persist();
   });
   $("#screen").querySelectorAll(".js-rem-edit").forEach(el=>el.onclick=()=>openRemindEditor(+el.dataset.id||el.dataset.id));
   $("#screen").querySelectorAll(".js-rem-del").forEach(el=>el.onclick=()=>confirmDelete("remind",el.dataset.id));
@@ -2420,6 +2526,8 @@ function openRemindEditor(id){
     item.note=note; item.enabled=true;
     if(id!=null){ Object.assign(it,item,{id:it.id}); if(it.done) delete it.done; }
     else { item.id=Date.now(); data.remind.unshift(item); }
+    const rid=id!=null?it.id:item.id;
+    if(!(+item.quick>0)){ const st=remState(); st.queue=st.queue.filter(q=>q.id!==rid); } // v1.9.3 修复：改为"不反复"后清掉遗留的反复队列条目
     mask.remove(); persist(); toast("提醒已保存");
   };
 }
@@ -3047,6 +3155,7 @@ sync.startAuto(); if(sync.on) sync.pull(true).then(()=>{ if((sync.cfg().rev||0)=
 
   // --- click ripple ---
   function addRipple(el) {
+    if (el.__rippled) return; el.__rippled = 1; // v1.9.4：防重复增强时叠加监听
     el.style.position = el.style.position || 'relative';
     el.addEventListener('click', function(e) {
       const rect = this.getBoundingClientRect();
@@ -3065,8 +3174,13 @@ sync.startAuto(); if(sync.on) sync.pull(true).then(()=>{ if((sync.cfg().rev||0)=
 
   // --- 3D card tilt ---
   function addTilt(el, max=6) {
+    if (el.classList.contains('tilt')) return; // v1.9.4：幂等，避免重复包裹
     el.classList.add('tilt');
-    el.innerHTML = '<div class="tilt-inner">' + el.innerHTML + '</div>';
+    // v1.9.4 修复：改用 DOM 节点移动代替 innerHTML 重包——innerHTML 重建会销毁瓦片内
+    // 所有已绑定事件（概览 data-open 跳转、习惯打卡、待办勾选等全部失效），移动节点则保留监听
+    const inner = document.createElement('div'); inner.className = 'tilt-inner';
+    while (el.firstChild) inner.appendChild(el.firstChild);
+    el.appendChild(inner);
     el.addEventListener('mousemove', function(e) {
       const r = this.getBoundingClientRect();
       const px = (e.clientX - r.left) / r.width - 0.5;
