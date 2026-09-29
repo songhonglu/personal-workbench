@@ -1501,7 +1501,6 @@ const sync = {
       const deadByMod={};   // v1.9.5: 墓碑索引——三端回收站中出现过的软删除 (module,id) 一律视为已删，删除操作才能跨端传播
       [data.__trash, remote.__trash, base.__trash].forEach(t=>{ (t||[]).forEach(i=>{ if(i&&i.id!=null&&i.__module){ (deadByMod[i.__module]=deadByMod[i.__module]||new Set()).add(String(i.id)); } }); });
       [data.__tombstones, remote.__tombstones, base.__tombstones].forEach(t=>{ (t||[]).forEach(i=>{ if(i&&i.id&&String(i.id).indexOf("::")>0){ const p=String(i.id).split("::"); (deadByMod[p[0]]=deadByMod[p[0]]||new Set()).add(p.slice(1).join("::")); } }); });   // v1.9.6: 持久墓碑参与合并——清空过回收站的删除也能传播
-      [data.__tombstones, remote.__tombstones, base.__tombstones].forEach(t=>{ (t||[]).forEach(i=>{ if(i&&i.id&&String(i.id).indexOf("::")>0){ const p=String(i.id).split("::"); (deadByMod[p[0]]=deadByMod[p[0]]||new Set()).add(p.slice(1).join("::")); } }); });   // v1.9.6: 持久墓碑参与合并——清空过回收站的删除也能传播
       keys.forEach(k=>{ const L=data[k],R=remote[k],B=base[k];
         const lc=JSON.stringify(L)!==JSON.stringify(B), rc=JSON.stringify(R)!==JSON.stringify(B);
         if(!rc) merged[k]=L; else if(!lc) merged[k]=R; else merged[k]=this._mergeKey(L,R,B,deadByMod[k]); });
@@ -2276,7 +2275,7 @@ function ensureV2(d){
   if(!d.__remindState.fired) d.__remindState.fired={};
   if(!Array.isArray(d.__remindState.queue)) d.__remindState.queue=[];
   if(!Array.isArray(d.__tombstones)) d.__tombstones=[];   // v1.9.6: 持久墓碑——独立于回收站的删除记录，清空回收站不影响
-  if(!Array.isArray(d.__tombstones)) d.__tombstones=[];   // v1.9.6: 持久墓碑——独立于回收站的删除记录，清空回收站不影响
+  if(Array.isArray(d.remind)&&d.remind.some(x=>x&&x.type==="quick"&&x.done===true)){ const dq=d.remind.filter(x=>x&&x.type==="quick"&&x.done===true); d.remind=d.remind.filter(x=>!(x&&x.type==="quick"&&x.done===true)); dq.forEach(x=>{ const tid="remind::"+String(x.id); if(!d.__tombstones.some(t=>t&&t.id===tid)) d.__tombstones.push({id:tid,at:isoToday()}); }); if(d.__tombstones.length>1000)d.__tombstones.splice(0,d.__tombstones.length-1000); }   // v1.9.7: 已触发的快捷提醒自动清理，带墓碑防跨端复活
   const __alive=new Map((d.remind||[]).map(x=>[x.id,x]));
   d.__remindState.queue=d.__remindState.queue.filter(q=>q&&((q.snooze&&String(q.id||"").indexOf("s-")===0)||(q.id!=null&&__alive.get(q.id)&&+__alive.get(q.id).quick>0))); // v1.9.5 加固：真实 id 的 snooze 条目同样要求提醒仍存在且反复>0，防止"稍后再响"后删除提醒留下僵尸
   return d;
@@ -2411,6 +2410,7 @@ function renderRemind(){
   const list=data.remind||[];
   const active=list.filter(x=>x.enabled!==false&&!x.done);
   const alarms=list.filter(x=>x.type==="alarm"), days=list.filter(x=>x.type==="birthday"||x.type==="anniv"), quicks=list.filter(x=>x.type==="quick"&&!x.done);
+  const vis=alarms.length+days.length+quicks.length;   // v1.9.7: 列表可见条数——已触发的快捷提醒不显示也不计入"共 X 条"
   const nextBdays=days.map(x=>({x,d:daysToMd(String(x.date||"").slice(5))})).filter(o=>o.d<=30).sort((a,b)=>a.d-b.d).slice(0,3);
   const holiRows=Object.keys(HOLIDAY_2026.off).reduce((acc,md)=>{ const nm=HOLIDAY_2026.off[md]; const last=acc[acc.length-1];
     if(last&&last.name===nm&&last.md2===prevMd(md)) last.md2=md; else acc.push({name:nm,md1:md,md2:md}); return acc; },[]);
@@ -2422,7 +2422,7 @@ function renderRemind(){
   $("#screen").innerHTML=`<div class="header"><div><h2>提醒中心</h2><p>闹铃 · 纪念日 · 生日 · 节假日 · 快捷反复提醒</p></div><div class="spacer"></div><span class="date-chip">${icon("calendar",14)} ${dateStr()}</span></div>
   <div class="v2-stats">
     <div class="v2-mini"><div class="l">今天</div><div class="v" style="font-size:15px">${dayType}</div><div class="s">${nh?("距"+nh.name+"假期还有 "+nh.days+" 天"):""}</div></div>
-    <div class="v2-mini"><div class="l">生效提醒</div><div class="v">${active.length}</div><div class="s">共 ${list.length} 条</div></div>
+    <div class="v2-mini"><div class="l">生效提醒</div><div class="v">${active.length}</div><div class="s">共 ${vis} 条</div></div>
     <div class="v2-mini"><div class="l">反复提醒中</div><div class="v">${st.queue.length}</div><div class="s">到点会持续响铃</div></div>
     <div class="v2-mini"><div class="l">近期纪念</div><div class="v" style="font-size:15px">${nextBdays.length?esc(nextBdays[0].x.title):"—"}</div><div class="s">${nextBdays.length?(nextBdays[0].d===0?"就是今天":nextBdays[0].d+" 天后"):"30 天内无纪念"}</div></div>
   </div>
@@ -2436,7 +2436,7 @@ function renderRemind(){
       ${alarms.length?'<div class="tile-h" style="margin-bottom:10px"><span class="tic" style="color:var(--accent);display:flex">'+icon("bell",15)+'</span><span style="font-size:13px;font-weight:700">闹铃</span></div>'+alarms.map(remCardHTML).join(""):""}
       ${days.length?'<div class="tile-h" style="margin:16px 0 10px"><span class="tic" style="color:var(--accent);display:flex">'+icon("heart",15)+'</span><span style="font-size:13px;font-weight:700">生日 · 纪念日</span></div>'+days.map(remCardHTML).join(""):""}
       ${quicks.length?'<div class="tile-h" style="margin:16px 0 10px"><span class="tic" style="color:var(--accent);display:flex">'+icon("timer",15)+'</span><span style="font-size:13px;font-weight:700">快捷提醒</span></div>'+quicks.map(remCardHTML).join(""):""}
-      ${list.length?"":'<div class="empty"><span class="e">'+icon("bell",28)+'</span><div>还没有提醒</div><div style="font-size:12.5px;color:var(--text-tertiary);margin-top:6px">点上方「新建提醒」，或用快捷条一键倒计时提醒</div></div>'}
+      ${vis?"":'<div class="empty"><span class="e">'+icon("bell",28)+'</span><div>还没有提醒</div><div style="font-size:12.5px;color:var(--text-tertiary);margin-top:6px">点上方「新建提醒」，或用快捷条一键倒计时提醒</div></div>'}
     </div>
     <aside class="v2-side">
       <div class="v2-card"><div class="v2-card-h"><span class="tic">${icon("calendar",16)}</span>2026 放假安排（国务院）</div>${holiHTML}
