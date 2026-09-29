@@ -1991,7 +1991,6 @@ function ensureV2(d){
   if(!Array.isArray(d.__tombstones)) d.__tombstones=[];   // v1.9.6: 持久墓碑——独立于回收站的删除记录，清空回收站不影响
   if(Array.isArray(d.remind)&&d.remind.some(x=>x&&x.type==="quick"&&x.done===true)){ const dq=d.remind.filter(x=>x&&x.type==="quick"&&x.done===true); d.remind=d.remind.filter(x=>!(x&&x.type==="quick"&&x.done===true)); dq.forEach(x=>{ const tid="remind::"+String(x.id); if(!d.__tombstones.some(t=>t&&t.id===tid)) d.__tombstones.push({id:tid,at:isoToday()}); }); if(d.__tombstones.length>1000)d.__tombstones.splice(0,d.__tombstones.length-1000); }   // v1.9.7: 已触发的快捷提醒自动清理，带墓碑防跨端复活
   if(Array.isArray(d.checkin)) d.checkin.forEach(x=>{ if(x&&x.log){ const tk=isoToday(); Object.keys(x.log).forEach(k=>{ if(String(k)>tk) delete x.log[k]; }); } });   // v1.9.8: 清理未来日期的打卡记录（历史误勾）
-  if(Array.isArray(d.checkin)) d.checkin.forEach(x=>{ if(x&&x.log){ const tk=isoToday(); Object.keys(x.log).forEach(k=>{ if(String(k)>tk) delete x.log[k]; }); } });   // v1.9.8: 清理未来日期的打卡记录（历史误勾）
   const __alive=new Map((d.remind||[]).map(x=>[x.id,x]));
   d.__remindState.queue=d.__remindState.queue.filter(q=>q&&((q.snooze&&String(q.id||"").indexOf("s-")===0)||(q.id!=null&&__alive.get(q.id)&&+__alive.get(q.id).quick>0))); // v1.9.5 加固：真实 id 的 snooze 条目同样要求提醒仍存在且反复>0，防止"稍后再响"后删除提醒留下僵尸
   return d;
