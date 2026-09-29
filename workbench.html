@@ -2428,6 +2428,61 @@ function wireModule(key){ const m=modOf(key);
       const cnt=$("#rec-count"); if(cnt) cnt.textContent=`${filtered.length} 条`;
     });
   }
+  // v1.13.0: 待办拖拽排序（原生 HTML5 Drag & Drop）
+  if(m.type==="todo"){
+    const grid=$(".rec-grid");
+    if(!grid) return;
+    const dragEl={ current:null, over:null };
+    grid.querySelectorAll(".rec").forEach(el=>{
+      el.draggable=true;
+      el.addEventListener("dragstart", e=>{
+        dragEl.current=el;
+        dragEl.id=el.querySelector("[data-edit]")?.dataset.edit;
+        el.style.opacity=".45";
+        e.dataTransfer.effectAllowed="move";
+        try{ e.dataTransfer.setData("text/plain","todo"); }catch(err){}
+      });
+      el.addEventListener("dragend", e=>{
+        el.style.opacity="";
+        dragEl.current=null;
+        if(dragEl.over && dragEl.over!==el) dragEl.over.style.outline="";
+      });
+      el.addEventListener("dragover", e=>{
+        e.preventDefault();
+        e.dataTransfer.dropEffect="move";
+        if(dragEl.over && dragEl.over!==el) dragEl.over.style.outline="";
+        dragEl.over=el;
+        el.style.outline="2px dashed var(--accent)";
+        el.style.outlineOffset="2px";
+      });
+      el.addEventListener("drop", e=>{
+        e.preventDefault();
+        const todos=data[key]||[];
+        const sorted=todos.slice();
+        const draggedId=dragEl.id;
+        const targetId=el.querySelector("[data-edit]")?.dataset.edit;
+        if(draggedId && targetId && draggedId!==targetId){
+          const di=sorted.findIndex(x=>String(x.id)===String(draggedId));
+          if(di>=0){
+            const [moved]=sorted.splice(di,1);
+            const ti=sorted.findIndex(x=>String(x.id)===String(targetId));
+            sorted.splice(ti<0?sorted.length:ti,0,moved);
+            data[key]=sorted;
+            persist();
+            renderModule(key);
+          }
+        }
+        el.style.outline="";
+        dragEl.over=null;
+      });
+    });
+    // 顶部提示
+    const tip=document.createElement("div");
+    tip.style.cssText="font-size:11px;color:var(--text-tertiary);margin-bottom:8px;display:flex;align-items:center;gap:4px";
+    tip.innerHTML='<span style="font-size:12px">⠿</span> 拖动待办卡片可调整顺序';
+    const recParent=grid.parentNode;
+    if(recParent) recParent.insertBefore(tip, grid);
+  }
 }
 
 /* ---------- EDITOR MODAL (per type) ---------- */
