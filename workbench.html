@@ -2732,17 +2732,54 @@ function renderChangelog(){
     <div style="display:flex;flex-direction:column;gap:10px">${rows}</div>`;
 }
 
+function renderTimeline(){
+  const events=[];
+  const push=(date,mod,color,ic,text,extra)=>{ if(!date) return; events.push({date,mod,color,ic,text,extra:extra||""}); };
+  // 待办
+  (data.todo||[]).forEach(x=>{ const d=x.lastDone||x.date; if(d) push(d,"todo","var(--module-1)","✓",esc(x.title||""),x.done?"":"未完成"); });
+  // 习惯打卡（逐日）
+  (data.checkin||[]).forEach(h=>{ Object.keys(h.log||{}).forEach(d=>{ if(h.log[d]) push(d,"checkin","var(--module-3)","🔥","打卡 · "+esc(h.title||"")); }); });
+  // 阅读进度
+  (data.read||[]).forEach(x=>{ if(x.date) push(x.date,"read","var(--module-5)","📖",esc(x.title||"")+" "+(x.progress!=null?Math.round(x.progress)+"%":"")); });
+  // 记账
+  (data.money||[]).forEach(x=>{ if(x.date) push(x.date,"money",x.type==="income"?"var(--module-1)":"var(--danger)","¥",(x.type==="income"?"+":"-")+"¥"+(x.amount||0)+" "+esc(x.title||x.cat||"")); });
+  // 笔记
+  (data.note||[]).forEach(x=>{ if(x.date) push(x.date,"note","var(--module-4)","📝",esc((x.title||x.content||"").slice(0,30))); });
+  // 番茄
+  (data.__pomo?.history||[]).forEach(h=>{ if(h.date) push(h.date,"focus","var(--module-6)","🍅",h.min+" 分钟专注"); });
+  // 心情
+  (data.__mood||{}).forEach((v,k)=>{ if(v&&v.score) push(k,"mood","var(--module-4)","😊","心情 "+v.score+"/5"+(v.tags&&v.tags.length?" · "+esc(v.tags.join(" ")):"")); });
+  // 健康
+  (data.__health||{}).forEach((v,k)=>{ if(v&&(v.water||v.steps)) push(k,"health","var(--module-2)","💧",((v.water? "💧"+v.water+"杯 ":"")+(v.steps?esc(String(v.steps))+"步":""))); });
+  events.sort((a,b)=>b.date.localeCompare(a.date));
+  // 按日期分组，取最近 14 天
+  const byDate={}; const daysList=[];
+  events.forEach(e=>{ const d=e.date.slice(0,10); if(!byDate[d]){ byDate[d]=[]; daysList.push(d); } byDate[d].push(e); });
+  const shown=daysList.slice(0,14);
+  const groups=shown.map(d=>{
+    const wd="日一二三四五六"[new Date(d).getDay()];
+    const isToday=d===today();
+    const rows=byDate[d].map(e=>`<div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px solid var(--surface-nested);font-size:12.5px"><span style="width:18px;text-align:center;flex-shrink:0">${e.ic}</span><span style="flex:1;color:var(--text-secondary)">${e.text}${e.extra?`<span style="font-size:10.5px;color:var(--text-tertiary);margin-left:6px">${e.extra}</span>`:""}</span><span style="font-size:10.5px;color:var(--text-tertiary);flex-shrink:0">${e.mod}</span></div>`).join("");
+    return `<div style="display:flex;gap:12px;padding:10px 0">
+      <div style="width:44px;flex-shrink:0;text-align:right"><div style="font-weight:${isToday?'800':'500'};font-size:13px;color:${isToday?'var(--accent)':'var(--text)'}">${parseInt(d.slice(8,10))}</div><div style="font-size:10.5px;color:var(--text-tertiary)">${isToday?'今天':'周'+wd}</div></div>
+      <div style="width:2px;flex-shrink:0;background:${isToday?'var(--accent)':'var(--surface-nested)'};border-radius:1px"></div>
+      <div style="flex:1;min-width:0">${rows||'<div style="color:var(--text-tertiary);font-size:11.5px;padding:4px 0">无记录</div>'}</div>
+    </div>`;
+  }).join("");
+  $("#screen").innerHTML=`<div class="header"><div><h2>时间线</h2><p>按日期汇总所有模块事件 · 滚动查看近 14 天</p></div><div class="spacer"></div><span class="date-chip">${icon("calendar",14)} ${dateStr()}</span></div>
+    <div class="side-card" style="margin-top:16px">${events.length?groups:'<div style="color:var(--text-tertiary);font-size:13px;padding:20px 0;text-align:center">暂无历史事件，先去各模块记录吧</div>'}</div>`;
+}
 /* ---------- router / sidebar ---------- */
 function dateStr(){ const n=new Date(); const wd="日一二三四五六"[n.getDay()]; return `${n.getFullYear()}年${n.getMonth()+1}月${n.getDate()}日 周${wd}`; }
 function go(v){ view=v; searchQ=""; renderNavActive(); render(); window.scrollTo({top:0}); }
-function render(){ if(view==="home") renderHome(); else if(view==="insight") renderInsight(); else if(view==="trash") renderTrash(); else if(view==="remind") renderRemind(); else if(view==="focus") renderFocus(); else if(view==="profile") renderProfile(); else if(view==="changelog") renderChangelog(); else if(view==="mood") renderMood(); else if(view==="health") renderHealth(); else renderModule(view); }
+function render(){ if(view==="home") renderHome(); else if(view==="insight") renderInsight(); else if(view==="trash") renderTrash(); else if(view==="remind") renderRemind(); else if(view==="focus") renderFocus(); else if(view==="profile") renderProfile(); else if(view==="changelog") renderChangelog(); else if(view==="mood") renderMood(); else if(view==="health") renderHealth(); else if(view==="timeline") renderTimeline(); else renderModule(view); }
 
 function buildNav(){
   $("#brandName").textContent=CONFIG.owner; $("#brandSlogan").textContent=CONFIG.slogan;
   const html=[`<div class="navi" data-go="home">${icon("home",19)}首页</div>`,
     `<div class="nav-sep">功能模块</div>`]
     .concat(CONFIG.modules.map(m=>`<div class="navi" data-go="${m.key}">${icon(m.icon,19)}${m.name}</div>`))
-    .concat([`<div class="nav-sep">统计</div>`, `<div class="navi" data-go="insight">${icon("chart",19)}洞察复盘</div>`, `<div class="navi" data-go="changelog">${icon("activity",19)}更新日志</div>`, `<div class="navi" data-go="trash">${icon("trash",19)}回收站</div>`]);
+    .concat([`<div class="nav-sep">统计</div>`, `<div class="navi" data-go="insight">${icon("chart",19)}洞察复盘</div>`, `<div class="navi" data-go="timeline">${icon("activity",19)}时间线</div>`, `<div class="navi" data-go="changelog">${icon("calendar",19)}更新日志</div>`, `<div class="navi" data-go="trash">${icon("trash",19)}回收站</div>`]);
   $("#nav").innerHTML=html.join("");
   $("#nav").querySelectorAll("[data-go]").forEach(el=>el.onclick=()=>go(el.dataset.go));
   renderNavActive();
