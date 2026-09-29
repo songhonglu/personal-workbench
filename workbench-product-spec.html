@@ -1,0 +1,560 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>个人工作台 · 产品说明书</title>
+<style>
+:root{
+  --bg:#0a0a0f; --bg-2:#10101a; --surface:rgba(255,255,255,.045); --surface-2:rgba(255,255,255,.08);
+  --border:rgba(255,255,255,.09); --border-2:rgba(255,255,255,.18);
+  --text:#f4f4f6; --text-2:#a8a8b3; --text-3:#70707c;
+  --accent:#ff2e55; --accent-2:#ff7a45; --accent-3:#ffb300;
+  --grad:linear-gradient(135deg,#ff2e55 0%,#ff7a45 100%);
+  --glow:0 12px 40px -8px rgba(255,46,85,.25);
+  --shadow-card:0 8px 28px -12px rgba(0,0,0,.55);
+  --radius:16px; --radius-l:22px;
+  --font:-apple-system,BlinkMacSystemFont,"PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+html{scroll-behavior:smooth}
+body{font-family:var(--font);background:var(--bg);color:var(--text);-webkit-font-smoothing:antialiased;overflow-x:hidden}
+::selection{background:rgba(255,46,85,.35)}
+
+/* 背景 */
+.orb{position:fixed;border-radius:50%;filter:blur(90px);pointer-events:none;z-index:0}
+.orb-1{width:520px;height:520px;background:rgba(255,46,85,.14);top:-180px;right:-120px}
+.orb-2{width:420px;height:420px;background:rgba(139,92,246,.10);top:30%;left:-180px}
+.orb-3{width:380px;height:380px;background:rgba(255,122,69,.09);bottom:-140px;right:18%}
+.noise{position:fixed;inset:0;z-index:0;pointer-events:none;opacity:.5;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='120' height='120'%3E%3Cfilter id='n'%3E%3CfeTurbulence type='fractalNoise' baseFrequency='.9' numOctaves='2'/%3E%3CfeColorMatrix values='0 0 0 0 1 0 0 0 0 1 0 0 0 0 1 0 0 0 .03 0'/%3E%3C/filter%3E%3Crect width='120' height='120' filter='url(%23n)'/%3E%3C/svg%3E")}
+
+/* 导航 */
+.nav{position:fixed;top:0;left:0;right:0;z-index:50;background:rgba(10,10,15,.85);backdrop-filter:blur(16px);border-bottom:1px solid var(--border);padding:0 28px;height:56px;display:flex;align-items:center;gap:8px;overflow-x:auto}
+.nav::-webkit-scrollbar{display:none}
+.nav a{display:inline-flex;align-items:center;gap:6px;padding:6px 14px;border-radius:999px;text-decoration:none;font-size:13px;color:var(--text-2);white-space:nowrap;transition:.18s}
+.nav a:hover{color:var(--text);background:var(--surface)}
+.nav a.active{color:var(--text);background:var(--surface-2);box-shadow:inset 0 0 0 1px var(--border-2)}
+.nav a .dot{width:6px;height:6px;border-radius:50%;background:var(--accent)}
+
+/* 主容器 */
+.page{position:relative;z-index:1;max-width:1160px;margin:0 auto;padding:88px 28px 80px}
+
+/* 幻灯片 */
+.slide{display:none;animation:fade .35s ease}
+.slide.active{display:block}
+@keyframes fade{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:none}}
+
+/* 标题 */
+.eyebrow{font-family:var(--mono);font-size:12px;letter-spacing:3px;color:var(--accent);margin-bottom:14px;text-transform:uppercase}
+h1{font-size:clamp(34px,5vw,50px);font-weight:700;line-height:1.12;letter-spacing:-1.5px;margin-bottom:16px}
+h1 .grad{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+h2{font-size:28px;font-weight:700;letter-spacing:-.5px;margin-bottom:10px}
+h3{font-size:18px;font-weight:600;margin-bottom:8px}
+.subtitle{color:var(--text-2);font-size:15px;max-width:60ch;line-height:1.7}
+
+/* 卡片 */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);padding:22px;backdrop-filter:blur(12px);transition:.25s}
+.card:hover{border-color:var(--border-2);background:var(--surface-2);box-shadow:var(--shadow-card)}
+
+/* 模块卡片网格 */
+.grid-2{display:grid;grid-template-columns:repeat(2,1fr);gap:16px;margin-top:24px}
+.grid-3{display:grid;grid-template-columns:repeat(3,1fr);gap:16px;margin-top:24px}
+.grid-4{display:grid;grid-template-columns:repeat(4,1fr);gap:16px;margin-top:24px}
+
+/* 模块色块 */
+.m1{border-left:3px solid var(--accent)} .m2{border-left:3px solid var(--module-1)} .m3{border-left:3px solid var(--module-2)} .m4{border-left:3px solid var(--module-3)} .m5{border-left:3px solid var(--module-4)} .m6{border-left:3px solid var(--module-5)}
+
+/* 功能列表 */
+.feat-list{display:grid;gap:10px;margin-top:16px}
+.feat-item{display:flex;align-items:flex-start;gap:12px;padding:12px 14px;background:var(--surface);border:1px solid var(--border);border-radius:12px;transition:.18s}
+.feat-item:hover{border-color:var(--border-2);background:var(--surface-2)}
+.feat-item .ico{width:36px;height:36px;border-radius:10px;display:grid;place-items:center;font-size:16px;flex-shrink:0}
+.feat-item h4{font-size:14px;font-weight:600;margin-bottom:2px}
+.feat-item p{font-size:12.5px;color:var(--text-2);line-height:1.5}
+
+/* 表格 */
+.table-wrap{overflow-x:auto;margin-top:16px}
+table{width:100%;border-collapse:collapse;font-size:13.5px}
+th,td{padding:11px 14px;text-align:left;border-bottom:1px solid var(--border)}
+th{font-family:var(--mono);font-size:11px;letter-spacing:1.5px;color:var(--text-3);text-transform:uppercase;font-weight:500}
+td{color:var(--text-2)}
+td b{color:var(--text);font-weight:600}
+tr:hover td{background:rgba(255,255,255,.02)}
+
+/* 标签 */
+.tag{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:3px 10px;border-radius:999px;border:1px solid var(--border);color:var(--text-2);font-family:var(--mono)}
+.tag.accent{background:rgba(255,46,85,.12);border-color:rgba(255,46,85,.25);color:#ff7d92}
+.tag.green{background:rgba(102,187,106,.12);border-color:rgba(102,187,106,.25);color:#81c784}
+.tag.gold{background:rgba(255,179,0,.12);border-color:rgba(255,179,0,.25);color:#ffd54f}
+
+/* 流程图 */
+.flow{display:flex;align-items:center;justify-content:center;gap:0;margin-top:24px;flex-wrap:wrap}
+.flow-step{display:flex;flex-direction:column;align-items:center;gap:8px;padding:14px 18px;background:var(--surface);border:1px solid var(--border);border-radius:14px;min-width:100px;text-align:center}
+.flow-step b{font-size:13px}
+.flow-step span{font-size:11px;color:var(--text-3);font-family:var(--mono)}
+.flow-arr{display:flex;align-items:center;color:var(--text-3);font-size:18px;padding:0 4px}
+
+/* 版本信息 */
+.vers{display:flex;gap:10px;flex-wrap:wrap;margin-top:12px}
+.ver{padding:6px 14px;border-radius:999px;border:1px solid var(--border);font-size:12px;font-family:var(--mono);color:var(--text-2)}
+.ver b{color:var(--text)}
+
+/* 页脚 */
+.footer{margin-top:60px;padding-top:24px;border-top:1px solid var(--border);display:flex;justify-content:space-between;gap:12px;flex-wrap:wrap;color:var(--text-3);font-size:12px}
+.footer .mono{font-family:var(--mono)}
+
+/* 分页指示器 */
+.pagi{position:fixed;bottom:24px;left:50%;transform:translateX(-50%);display:flex;gap:8px;z-index:40}
+.pagi button{width:8px;height:8px;border-radius:50%;border:1px solid var(--border-2);background:transparent;cursor:pointer;transition:.2s;padding:0}
+.pagi button.active{background:var(--grad);border-color:transparent;box-shadow:var(--glow)}
+
+/* 响应式 */
+@media (max-width:960px){
+  .grid-2,.grid-3,.grid-4{grid-template-columns:1fr 1fr}
+  .flow{flex-direction:column;gap:8px}
+  .flow-arr{transform:rotate(90deg)}
+}
+@media (max-width:640px){
+  .page{padding:72px 16px 60px}
+  .grid-2,.grid-3,.grid-4{grid-template-columns:1fr}
+  .nav{padding:0 12px}
+  h1{font-size:30px}
+}
+</style>
+</head>
+<body>
+<div class="orb orb-1"></div><div class="orb orb-2"></div><div class="orb orb-3"></div>
+<div class="noise"></div>
+
+<!-- 导航 -->
+<nav class="nav" id="nav"></nav>
+
+<!-- 主内容 -->
+<div class="page" id="content">
+
+  <!-- SLIDE 1: 封面 -->
+  <div class="slide active" data-slide="0">
+    <p class="eyebrow">PRODUCT SPECIFICATION · v1.9</p>
+    <h1>个人每日<br><span class="grad">工作台</span></h1>
+    <p class="subtitle">一个零依赖的纯前端个人生产力工具，集计划、打卡、记账、目标、记录于一体。数据存 localStorage，支持双端同步，可导出备份。</p>
+    <div class="grid-2" style="margin-top:32px">
+      <div class="card">
+        <h3>📱 双端覆盖</h3>
+        <p style="color:var(--text-2);font-size:13px">桌面版 + 移动版，同一份数据，同一份配置</p>
+      </div>
+      <div class="card">
+        <h3>🔒 数据自控</h3>
+        <p style="color:var(--text-2);font-size:13px">localStorage 本地存储，可导出 JSON 备份，可接入轻量后端实现多端同步</p>
+      </div>
+    </div>
+    <div class="vers" style="margin-top:20px">
+      <span class="ver"><b>版本</b> v1.9</span>
+      <span class="ver"><b>存储</b> localStorage (workbench-v1)</span>
+      <span class="ver"><b>技术栈</b> 纯 HTML/CSS/JS · 零依赖</span>
+      <span class="ver"><b>双端</b> desktop + mobile</span>
+    </div>
+  </div>
+
+  <!-- SLIDE 2: 产品定位 -->
+  <div class="slide" data-slide="1">
+    <p class="eyebrow">01 · 产品定位</p>
+    <h2>为什么需要一个个人工作台？</h2>
+    <p class="subtitle">碎片化信息时代，计划、打卡、记账、目标、记录散落在不同 App 里。一个统一入口，让每天的成长可追踪、可复盘。</p>
+    <div class="grid-3" style="margin-top:24px">
+      <div class="card">
+        <h3 style="font-size:15px">🎯 要事优先</h3>
+        <p style="color:var(--text-2);font-size:12.5px">每天三件事，P0 紧急优先，完成度一目了然</p>
+      </div>
+      <div class="card">
+        <h3 style="font-size:15px">🌱 习惯养成</h3>
+        <p style="color:var(--text-2);font-size:12.5px">早起、运动、阅读…连续打卡，天数累积，拒绝三天打鱼</p>
+      </div>
+      <div class="card">
+        <h3 style="font-size:15px">📊 量化成长</h3>
+        <p style="color:var(--text-2);font-size:12.5px">阅读页数、跑步公里、储蓄金额…年度目标进度可视化</p>
+      </div>
+      <div class="card">
+        <h3 style="font-size:15px">💰 收支透明</h3>
+        <p style="color:var(--text-2);font-size:12.5px">8 大分类记账，月度统计，支出构成一目了然</p>
+      </div>
+      <div class="card">
+        <h3 style="font-size:15px">✍️ 灵感记录</h3>
+        <p style="color:var(--text-2);font-size:12.5px">灵感、摘录、复盘、生活…四种心情标签，随手记</p>
+      </div>
+      <div class="card">
+        <h3 style="font-size:15px">🍅 专注计时</h3>
+        <p style="color:var(--text-2);font-size:12.5px">番茄钟 25 分钟专注，连续作战，今日战绩可追溯</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 3: 核心模块 -->
+  <div class="slide" data-slide="2">
+    <p class="eyebrow">02 · 核心模块</p>
+    <h2>五大功能模块</h2>
+    <p class="subtitle">每个模块独立运作，数据互不干扰，按需使用。</p>
+
+    <div class="grid-2" style="margin-top:24px">
+      <div class="card m1">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <span class="tag accent">TODO</span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--text-3)">P0/P1/P2 三级优先级</span>
+        </div>
+        <h3>今日计划</h3>
+        <p style="color:var(--text-2);font-size:13px;line-height:1.7">每日待办清单，支持 P0 紧急、P1 重要、P2 待办三级优先级。勾选完成、添加备注、删除重排。完成度自动计算，今日概览环形实时更新。</p>
+        <div class="feat-list">
+          <div class="feat-item"><div class="ico" style="background:rgba(255,46,85,.12);color:#ff7d92">✓</div><div><h4>勾选完成</h4><p>点击勾选，完成度实时更新</p></div></div>
+          <div class="feat-item"><div class="ico" style="background:rgba(255,179,0,.12);color:#ffd54f">P</div><div><h4>三级优先级</h4><p>P0 紧急 · P1 重要 · P2 待办，颜色区分</p></div></div>
+          <div class="feat-item"><div class="ico" style="background:rgba(102,187,106,.12);color:#81c784">+</div><div><h4>备注记录</h4><p>每个任务可写备注，记录执行细节</p></div></div>
+        </div>
+      </div>
+
+      <div class="card m2">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <span class="tag green">CHECKIN</span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--text-3)">连续天数 · 每日清零</span>
+        </div>
+        <h3>习惯打卡</h3>
+        <p style="color:var(--text-2);font-size:13px;line-height:1.7">每日习惯追踪，打卡记录按日期存储，连续天数自动计算。每天零点自动清零，新一天重新开始。</p>
+        <div class="feat-list">
+          <div class="feat-item"><div class="ico" style="background:rgba(102,187,106,.12);color:#81c784">●</div><div><h4>每日打卡</h4><p>点击打卡，日期记录自动保存</p></div></div>
+          <div class="feat-item"><div class="ico" style="background:rgba(139,92,246,.12);color:#b39ddb">🔥</div><div><h4>连续天数</h4><p>自动计算当前连续打卡天数</p></div></div>
+          <div class="feat-item"><div class="ico" style="background:rgba(255,179,0,.12);color:#ffd54f">📅</div><div><h4>历史记录</h4><p>点击日期查看历史打卡状态</p></div></div>
+        </div>
+      </div>
+
+      <div class="card m3">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <span class="tag gold">PROGRESS</span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--text-3)">当前/目标 · 进度条</span>
+        </div>
+        <h3>长期目标</h3>
+        <p style="color:var(--text-2);font-size:13px;line-height:1.7">年度目标量化推进，阅读页数、跑步公里、储蓄金额…当前值 + 目标值，进度条可视化。</p>
+        <div class="feat-list">
+          <div class="feat-item"><div class="ico" style="background:rgba(255,179,0,.12);color:#ffd54f">📊</div><div><h4>进度条</h4><p>当前/目标，百分比自动计算</p></div></div>
+          <div class="feat-item"><div class="ico" style="background:rgba(102,187,106,.12);color:#81c784">+</div><div><h4>自定义单位</h4><p>页、公里、元…任何单位都支持</p></div></div>
+          <div class="feat-item"><div class="ico" style="background:rgba(139,92,246,.12);color:#b39ddb">📝</div><div><h4>备注说明</h4><p>记录目标进展和下一步计划</p></div></div>
+        </div>
+      </div>
+
+      <div class="card m4">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <span class="tag accent">FINANCE</span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--text-3)">8 大分类 · 月度统计</span>
+        </div>
+        <h3>记账本</h3>
+        <p style="color:var(--text-2);font-size:13px;line-height:1.7">收入/支出双记录，8 大分类（工资、餐饮、交通、居住、购物、娱乐、学习、其他），月度统计一目了然。</p>
+        <div class="feat-list">
+          <div class="feat-item"><div class="ico" style="background:rgba(255,46,85,.12);color:#ff7d92">±</div><div><h4>收支双录</h4><p>收入（绿色）/ 支出（红色）颜色区分</p></div></div>
+          <div class="feat-item"><div class="ico" style="background:rgba(102,187,106,.12);color:#81c784">🏷</div><div><h4>8 大分类</h4><p>工资、餐饮、交通、居住、购物、娱乐、学习、其他</p></div></div>
+          <div class="feat-item"><div class="ico" style="background:rgba(139,92,246,.12);color:#b39ddb">📊</div><div><h4>月度统计</h4><p>本月收入、支出、结余自动汇总</p></div></div>
+        </div>
+      </div>
+
+      <div class="card m5">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:10px">
+          <span class="tag" style="background:rgba(126,87,194,.12);border-color:rgba(126,87,194,.25);color:#b39ddb">NOTE</span>
+          <span style="font-family:var(--mono);font-size:11px;color:var(--text-3)">4 种心情 · 随手记</span>
+        </div>
+        <h3>随手记</h3>
+        <p style="color:var(--text-2);font-size:13px;line-height:1.7">灵感、摘录、复盘、生活四种心情标签，标题 + 正文 + 日期，按时间线排列，支持搜索。</p>
+        <div class="feat-list">
+          <div class="feat-item"><div class="ico" style="background:rgba(126,87,194,.12);color:#b39ddb">✍</div><div><h4>四种心情</h4><p>灵感 · 摘录 · 复盘 · 生活，标签可筛选</p></div></div>
+          <div class="feat-item"><div class="ico" style="background:rgba(102,187,106,.12);color:#81c784">🔍</div><div><h4>全文搜索</h4><p>标题 + 正文关键词搜索</p></div></div>
+          <div class="feat-item"><div class="ico" style="background:rgba(255,179,0,.12);color:#ffd54f">📅</div><div><h4>时间线</h4><p>按日期倒序排列，最近在前</p></div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 4: 全局功能 -->
+  <div class="slide" data-slide="3">
+    <p class="eyebrow">03 · 全局功能</p>
+    <h2>超越模块本身的体验</h2>
+    <p class="subtitle">五大模块之外，还有这些让工作台真正好用的能力。</p>
+
+    <div class="grid-2" style="margin-top:24px">
+      <div class="card">
+        <h3 style="font-size:16px;margin-bottom:10px">📊 今日概览环形</h3>
+        <p style="color:var(--text-2);font-size:13px;line-height:1.7">顶部 4 个环形进度条，实时展示今日计划完成度、习惯打卡完成率、长期目标平均进度、本周随手记篇数。一屏总览今日状态。</p>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+          <span class="tag accent">计划完成度</span>
+          <span class="tag green">打卡完成率</span>
+          <span class="tag gold">目标进度</span>
+          <span class="tag">随手记篇数</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="font-size:16px;margin-bottom:10px">📈 本周专注度趋势</h3>
+        <p style="color:var(--text-2);font-size:13px;line-height:1.7">近 7 天专注度趋势图，按日自动打点。覆盖≥4 天时启用，缺失日记按 0 处理，无记录时回退旧趋势数据。一眼看出本周状态起伏。</p>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+          <span class="tag" style="font-family:var(--mono)">v1.3 自动化</span>
+          <span class="tag green">7 天覆盖</span>
+          <span class="tag gold">自动打点</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="font-size:16px;margin-bottom:10px">⚡ 快速记录</h3>
+        <p style="color:var(--text-2);font-size:13px;line-height:1.7">5 个快速按钮（记任务、记打卡、记进度、记一笔、记笔记），点击直接跳转到对应模块新建，省去导航步骤。</p>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+          <span class="tag">记任务</span><span class="tag">记打卡</span><span class="tag">记进度</span><span class="tag">记一笔</span><span class="tag">记笔记</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="font-size:16px;margin-bottom:10px">🔍 全局搜索</h3>
+        <p style="color:var(--text-2);font-size:13px;line-height:1.7">顶部搜索框，一键搜索待办、笔记、记账记录。支持关键词模糊匹配，结果高亮显示。</p>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+          <span class="tag" style="font-family:var(--mono)">/ 快捷键</span>
+          <span class="tag green">模糊匹配</span>
+          <span class="tag gold">结果高亮</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="font-size:16px;margin-bottom:10px">🎨 主题换肤</h3>
+        <p style="color:var(--text-2);font-size:13px;line-height:1.7">4 套预设主题：琥珀（默认）、薄荷、摩卡、玫瑰。所有颜色走 `:root` token，改主题只动一处。</p>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+          <span class="tag" style="background:rgba(255,183,77,.12);border-color:rgba(255,183,77,.25);color:#ffd54f">琥珀</span>
+          <span class="tag green">薄荷</span>
+          <span class="tag" style="background:rgba(176,137,104,.12);border-color:rgba(176,137,104,.25);color:#d4a574">摩卡</span>
+          <span class="tag" style="background:rgba(240,98,146,.12);border-color:rgba(240,98,146,.25);color:#f48fb1">玫瑰</span>
+        </div>
+      </div>
+      <div class="card">
+        <h3 style="font-size:16px;margin-bottom:10px">💾 数据管理</h3>
+        <p style="color:var(--text-2);font-size:13px;line-height:1.7">localStorage 本地存储，支持导出 JSON 备份、导入恢复。可选接入轻量后端实现多设备实时同步。</p>
+        <div style="margin-top:12px;display:flex;gap:8px;flex-wrap:wrap">
+          <span class="tag green">导出 JSON</span>
+          <span class="tag gold">导入恢复</span>
+          <span class="tag">多端同步</span>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 5: 技术架构 -->
+  <div class="slide" data-slide="4">
+    <p class="eyebrow">04 · 技术架构</p>
+    <h2>极简技术栈，零依赖运行</h2>
+    <p class="subtitle">纯前端 HTML/CSS/JS，无任何外部依赖，双端同源配置。</p>
+
+    <div class="table-wrap" style="margin-top:20px">
+      <table>
+        <thead>
+          <tr><th>层面</th><th>技术选型</th><th>说明</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><b>结构</b></td><td>HTML5</td><td>单文件，语义化标签</td></tr>
+          <tr><td><b>样式</b></td><td>CSS3 · CSS Variables · Flex/Grid</td><td>所有颜色走 :root token，一处改色整站换肤</td></tr>
+          <tr><td><b>逻辑</b></td><td>Vanilla JS (ES6+)</td><td>无框架，无构建，直接运行</td></tr>
+          <tr><td><b>存储</b></td><td>localStorage</td><td>key: <code>workbench-v1</code>，双端同 key 自动共享</td></tr>
+          <tr><td><b>同步</b></td><td>可选轻量后端</td><td>自托管，多设备实时共享（非必须）</td></tr>
+          <tr><td><b>图标</b></td><td>内联 SVG</td><td>无外部字体，无 CDN 依赖</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="font-size:16px;margin-top:28px;margin-bottom:10px">双端文件结构</h3>
+    <div class="table-wrap">
+      <table>
+        <thead>
+          <tr><th>文件</th><th>用途</th><th>适配</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><code>workbench.html</code></td><td>桌面版工作台</td><td>侧栏导航 + 多列网格，min-width:1000px</td></tr>
+          <tr><td><code>workbench-m.html</code></td><td>移动版工作台</td><td>底栏 Tab + 浮动按钮，max-width:480px</td></tr>
+          <tr><td><code>workbench-deploy-v1.9.zip</code></td><td>部署包</td><td>双端文件 + 部署说明</td></tr>
+        </tbody>
+      </table>
+    </div>
+
+    <h3 style="font-size:16px;margin-top:28px;margin-bottom:10px">数据流</h3>
+    <div class="flow">
+      <div class="flow-step"><b>用户操作</b><span>点击 / 输入</span></div>
+      <div class="flow-arr">→</div>
+      <div class="flow-step"><b>JS 处理</b><span>状态更新 + 渲染</span></div>
+      <div class="flow-arr">→</div>
+      <div class="flow-step"><b>localStorage</b><span>持久化存储</span></div>
+      <div class="flow-arr">→</div>
+      <div class="flow-step"><b>可选同步</b><span>后端推送</span></div>
+    </div>
+  </div>
+
+  <!-- SLIDE 6: 使用场景 -->
+  <div class="slide" data-slide="5">
+    <p class="eyebrow">05 · 使用场景</p>
+    <h2>谁在用？怎么用？</h2>
+    <p class="subtitle">从个人日常到团队协作，一个工作台覆盖多种场景。</p>
+
+    <div class="grid-2" style="margin-top:24px">
+      <div class="card">
+        <h3 style="font-size:15px;margin-bottom:8px">🌅 晨间启动</h3>
+        <p style="color:var(--text-2);font-size:13px;line-height:1.7">打开工作台 → 查看今日概览环形 → 确认今日三件事 → 打卡早起、运动、阅读 → 开始一天。</p>
+      </div>
+      <div class="card">
+        <h3 style="font-size:15px;margin-bottom:8px">📝 工作记录</h3>
+        <p style="color:var(--text-2);font-size:13px;line-height:1.7">任务完成后勾选 → 灵感随手记 → 下班前复盘今日完成度 → 调整明日计划。</p>
+      </div>
+      <div class="card">
+        <h3 style="font-size:15px;margin-bottom:8px">💰 月度复盘</h3>
+        <p style="color:var(--text-2);font-size:13px;line-height:1.7">月底查看记账统计 → 分析支出构成 → 调整下月预算 → 更新长期目标进度。</p>
+      </div>
+      <div class="card">
+        <h3 style="font-size:15px;margin-bottom:8px">📚 年度追踪</h3>
+        <p style="color:var(--text-2);font-size:13px;line-height:1.7">阅读页数、跑步公里、储蓄金额…年度目标进度条可视化，每周更新，年底复盘。</p>
+      </div>
+      <div class="card">
+        <h3 style="font-size:15px;margin-bottom:8px">🍅 专注模式</h3>
+        <p style="color:var(--text-2);font-size:13px;line-height:1.7">番茄钟 25 分钟专注 → 连续作战 → 今日战绩可追溯，拒绝分心。</p>
+      </div>
+      <div class="card">
+        <h3 style="font-size:15px;margin-bottom:8px">📱 双端同步</h3>
+        <p style="color:var(--text-2);font-size:13px;line-height:1.7">电脑上记任务 → 手机上打卡 → 同一份数据，同一份配置，无缝切换。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 7: 版本演进 -->
+  <div class="slide" data-slide="6">
+    <p class="eyebrow">06 · 版本演进</p>
+    <h2>从 v1.0 到 v1.9</h2>
+    <p class="subtitle">持续迭代，功能不断丰富。</p>
+
+    <div class="table-wrap" style="margin-top:20px">
+      <table>
+        <thead>
+          <tr><th>版本</th><th>主要更新</th><th>日期</th></tr>
+        </thead>
+        <tbody>
+          <tr><td><b>v1.0</b></td><td>初始版本：5 大模块（TODO / 打卡 / 目标 / 记账 / 笔记）</td><td>2026-09</td></tr>
+          <tr><td><b>v1.1</b></td><td>新增提醒中心模块，支持闹铃、纪念日、生日、节假日</td><td>2026-09</td></tr>
+          <tr><td><b>v1.2</b></td><td>新增番茄专注模块，25 分钟专注 + 连续作战 + 今日战绩</td><td>2026-09</td></tr>
+          <tr><td><b>v1.3</b></td><td>本周专注度趋势（v1.3 自动化：__trendLog 按日自动打点）</td><td>2026-09</td></tr>
+          <tr><td><b>v1.4</b></td><td>新增个人信息模块，支持维护个性化资料</td><td>2026-09</td></tr>
+          <tr><td><b>v1.5</b></td><td>主题换肤：琥珀 / 薄荷 / 摩卡 / 玫瑰 4 套预设</td><td>2026-09</td></tr>
+          <tr><td><b>v1.6</b></td><td>全局搜索功能，支持待办、笔记、记账关键词搜索</td><td>2026-09</td></tr>
+          <tr><td><b>v1.7</b></td><td>快速记录按钮，5 个一键新建入口</td><td>2026-09</td></tr>
+          <tr><td><b>v1.8</b></td><td>数据导出 / 导入备份功能</td><td>2026-09</td></tr>
+          <tr><td><b>v1.9</b></td><td>移动版工作台（workbench-m.html）发布，双端覆盖</td><td>2026-09</td></tr>
+        </tbody>
+      </table>
+    </div>
+  </div>
+
+  <!-- SLIDE 8: 快速上手 -->
+  <div class="slide" data-slide="7">
+    <p class="eyebrow">07 · 快速上手</p>
+    <h2>3 分钟开始使用</h2>
+    <p class="subtitle">打开即用，无需注册，无需配置。</p>
+
+    <div class="flow" style="margin-top:28px">
+      <div class="flow-step"><b>① 打开</b><span>双击 workbench.html</span></div>
+      <div class="flow-arr">→</div>
+      <div class="flow-step"><b>② 使用</b><span>点击模块开始记录</span></div>
+      <div class="flow-arr">→</div>
+      <div class="flow-step"><b>③ 同步</b><span>导出备份 / 接入后端</span></div>
+    </div>
+
+    <div class="grid-3" style="margin-top:28px">
+      <div class="card">
+        <h3 style="font-size:14px;margin-bottom:8px">💡 小技巧</h3>
+        <p style="color:var(--text-2);font-size:12.5px;line-height:1.7">按 <code>/</code> 键快速聚焦搜索框；点击侧栏顶部头像可切换主题。</p>
+      </div>
+      <div class="card">
+        <h3 style="font-size:14px;margin-bottom:8px">🔄 数据备份</h3>
+        <p style="color:var(--text-2);font-size:12.5px;line-height:1.7">定期导出 JSON 文件，换设备 / 清缓存前必做。</p>
+      </div>
+      <div class="card">
+        <h3 style="font-size:14px;margin-bottom:8px">📱 手机端</h3>
+        <p style="color:var(--text-2);font-size:12.5px;line-height:1.7">用 workbench-m.html，底栏 Tab 切换模块，浮动按钮新增记录。</p>
+      </div>
+    </div>
+
+    <div style="margin-top:28px;padding:18px 20px;background:var(--surface);border:1px solid var(--border);border-radius:var(--radius);display:flex;align-items:center;gap:12px">
+      <span style="font-size:24px">⚠️</span>
+      <div>
+        <p style="font-size:13px;color:var(--text-2);line-height:1.6"><b style="color:var(--text)">数据安全提醒：</b>数据存在浏览器 localStorage，换设备 / 清缓存会丢失。左下角有「导出备份」，建议定期导出 JSON 文件。可选接入轻量后端实现多端同步。</p>
+      </div>
+    </div>
+  </div>
+
+  <!-- SLIDE 9: 结束页 -->
+  <div class="slide" data-slide="8">
+    <p class="eyebrow">THANK YOU</p>
+    <h1>开始使用<br><span class="grad">你的工作台</span></h1>
+    <p class="subtitle" style="text-align:center;margin-bottom:32px">计划 · 专注 · 记录 · 成长</p>
+    <div style="display:flex;justify-content:center;gap:12px;flex-wrap:wrap">
+      <a href="workbench.html" style="display:inline-flex;align-items:center;gap:8px;padding:12px 28px;background:var(--grad);color:#fff;border-radius:999px;text-decoration:none;font-weight:500;box-shadow:var(--glow);transition:.2s">🖥️ 打开桌面版</a>
+      <a href="workbench-m.html" style="display:inline-flex;align-items:center;gap:8px;padding:12px 28px;background:var(--surface);border:1px solid var(--border-2);color:var(--text);border-radius:999px;text-decoration:none;transition:.2s">📱 打开手机版</a>
+    </div>
+    <div style="margin-top:40px;text-align:center;color:var(--text-3);font-size:12px;font-family:var(--mono)">
+      个人每日工作台 · v1.9 · localStorage · 零依赖
+    </div>
+  </div>
+
+</div>
+
+<!-- 分页指示器 -->
+<div class="pagi" id="pagi"></div>
+
+<script>
+const slides = document.querySelectorAll('.slide');
+const nav = document.getElementById('nav');
+const pagi = document.getElementById('pagi');
+let current = 0;
+
+// 导航 + 分页
+const titles = ['封面','产品定位','核心模块','全局功能','技术架构','使用场景','版本演进','快速上手','结束'];
+titles.forEach((t,i)=>{
+  const a = document.createElement('a');
+  a.href = '#';
+  a.className = i===0 ? 'active' : '';
+  a.innerHTML = i===0 ? '<span class="dot"></span> 封面' : t;
+  a.addEventListener('click', e=>{ e.preventDefault(); goTo(i); });
+  nav.appendChild(a);
+
+  const btn = document.createElement('button');
+  btn.className = i===0 ? 'active' : '';
+  btn.title = t;
+  btn.addEventListener('click', ()=> goTo(i));
+  pagi.appendChild(btn);
+});
+
+function goTo(i){
+  if(i<0||i>=slides.length) return;
+  slides[current].classList.remove('active');
+  current = i;
+  slides[current].classList.add('active');
+  document.querySelectorAll('.nav a').forEach((a,j)=>a.classList.toggle('active', j===current));
+  document.querySelectorAll('.pagi button').forEach((b,j)=>b.classList.toggle('active', j===current));
+}
+
+// 键盘导航
+document.addEventListener('keydown', e=>{
+  if(e.key==='ArrowRight' || e.key==='PageDown') goTo(current+1);
+  if(e.key==='ArrowLeft' || e.key==='PageUp') goTo(current-1);
+  if(e.key==='Home') goTo(0);
+  if(e.key==='End') goTo(slides.length-1);
+});
+
+// 鼠标滚轮（防抖）
+let wheelLock = false;
+window.addEventListener('wheel', e=>{
+  if(wheelLock) return;
+  wheelLock = true;
+  setTimeout(()=>wheelLock=false, 800);
+  if(e.deltaY > 30) goTo(current+1);
+  if(e.deltaY < -30) goTo(current-1);
+}, {passive:true});
+
+// 触摸滑动
+let touchStartY = 0;
+window.addEventListener('touchstart', e=>touchStartY=e.touches[0].clientY, {passive:true});
+window.addEventListener('touchend', e=>{
+  const dy = touchStartY - e.changedTouches[0].clientY;
+  if(dy > 60) goTo(current+1);
+  if(dy < -60) goTo(current-1);
+}, {passive:true});
+</script>
+</body>
+</html>

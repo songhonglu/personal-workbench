@@ -1,0 +1,150 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
+<title>{{TITLE}} · 小红书归档</title>
+<!--
+  ════════════════════════════════════════════════════════════
+  小红书归档 · 详情页模板 v2（配合新版列表页 index.html 使用）
+  ────────────────────────────────────────────────────────────
+  cowAgent 生成时替换以下占位符（可选字段留空即可，页面会自动降级）：
+    {{TITLE}}       标题
+    {{DATE}}        归档日期，如 2026-09-26
+    {{TYPE}}        内容类型，如 图文H5 / 视频笔记
+    {{SLUG}}        归档目录名，如 2026-09-26-xxx
+    {{URL}}         小红书原帖链接（拿不到就填 #）
+    {{DESC}}        描述 / 摘要文字（可空）
+    {{TAGS_HTML}}   标签片段，如 <span class="r-tag">AI</span>（可空）
+    {{INDEX}}/{{TOTAL}}  归档编号 / 总数
+    {{PREV_URL}} {{PREV_TITLE}} {{NEXT_URL}} {{NEXT_TITLE}}  上下篇（可空）
+    {{CONTENT_HTML}}  正文富文本（可选，支持 p/h2/ul/blockquote/img）
+  ════════════════════════════════════════════════════════════
+-->
+<style>
+:root{
+  --bg:#0a0a0f; --bg-2:#10101a;
+  --surface:rgba(255,255,255,.045); --surface-2:rgba(255,255,255,.08);
+  --border:rgba(255,255,255,.09); --border-2:rgba(255,255,255,.18);
+  --text:#f4f4f6; --text-2:#a8a8b3; --text-3:#70707c;
+  --accent:#ff2e55; --accent-2:#ff7a45;
+  --grad:linear-gradient(135deg,#ff2e55 0%,#ff7a45 100%);
+  --glow:0 12px 40px -8px rgba(255,46,85,.25);
+  --font:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Hiragino Sans GB","Microsoft YaHei",sans-serif;
+  --mono:ui-monospace,"SF Mono",SFMono-Regular,Menlo,Consolas,monospace;
+}
+*{margin:0;padding:0;box-sizing:border-box}
+body{font-family:var(--font);background:var(--bg);color:var(--text);min-height:100dvh;line-height:1.75;-webkit-font-smoothing:antialiased}
+.orb{position:fixed;border-radius:50%;filter:blur(90px);pointer-events:none;z-index:0}
+.orb-1{width:480px;height:480px;background:rgba(255,46,85,.13);top:-160px;right:-100px}
+.orb-2{width:380px;height:380px;background:rgba(139,92,246,.10);bottom:-120px;left:-120px}
+.page{position:relative;z-index:1;max-width:760px;margin:0 auto;padding:0 22px 60px}
+.top{display:flex;align-items:center;justify-content:space-between;padding:22px 0}
+.top a{display:inline-flex;align-items:center;gap:8px;color:var(--text-2);text-decoration:none;font-size:13px;padding:8px 16px;border:1px solid var(--border);border-radius:999px;transition:.2s;background:var(--surface)}
+.top a:hover{color:var(--text);border-color:var(--border-2)}
+.crumb{font-family:var(--mono);font-size:11px;letter-spacing:2.5px;color:var(--accent);text-transform:uppercase}
+h1.title{font-size:clamp(26px,4.5vw,36px);font-weight:700;line-height:1.28;letter-spacing:-.8px;margin:18px 0 20px}
+.grad{background:var(--grad);-webkit-background-clip:text;background-clip:text;-webkit-text-fill-color:transparent}
+.meta-row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:34px}
+.mchip{font-family:var(--mono);font-size:11.5px;color:var(--text-2);border:1px solid var(--border);background:var(--surface);border-radius:999px;padding:5px 13px;display:inline-flex;align-items:center;gap:6px}
+.mchip i{width:6px;height:6px;border-radius:50%;background:var(--grad);display:inline-block}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:20px;backdrop-filter:blur(12px);overflow:hidden}
+.prose{padding:28px 30px}
+.prose p{font-size:15px;color:var(--text-2);margin-bottom:14px}
+.prose h2{font-size:19px;margin:26px 0 12px;letter-spacing:-.3px}
+.prose ul{padding-left:22px;margin-bottom:14px;color:var(--text-2);font-size:15px}
+.prose li{margin-bottom:6px}
+.prose blockquote{border-left:3px solid var(--accent);background:rgba(255,46,85,.06);border-radius:0 12px 12px 0;padding:12px 18px;margin:16px 0;color:var(--text-2);font-size:14.5px}
+.prose img{max-width:100%;border-radius:14px;border:1px solid var(--border);margin:12px 0}
+.prose code{font-family:var(--mono);font-size:13px;background:var(--surface-2);border:1px solid var(--border);border-radius:6px;padding:2px 7px}
+.hint{display:flex;gap:12px;border-left:3px solid var(--accent);background:rgba(255,46,85,.06);padding:16px 18px;font-size:14px;color:var(--text-2)}
+.hint b{color:var(--text)}
+.info-grid{display:grid;grid-template-columns:repeat(2,1fr);gap:10px;padding:0 30px 26px}
+.info-item{background:rgba(255,255,255,.03);border:1px solid var(--border);border-radius:13px;padding:12px 15px}
+.info-item small{display:block;font-family:var(--mono);font-size:10px;letter-spacing:1.5px;color:var(--text-3);text-transform:uppercase;margin-bottom:2px}
+.info-item span{font-size:13.5px;word-break:break-all}
+.info-item a{color:#ff7d92;text-decoration:none}
+.info-item a:hover{text-decoration:underline}
+.nav-row{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-top:22px}
+.nav-item{display:block;background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:14px 16px;text-decoration:none;color:var(--text-2);transition:.2s;min-width:0}
+.nav-item:hover{border-color:var(--border-2);background:var(--surface-2);transform:translateY(-2px)}
+.nav-item small{display:block;font-size:10.5px;font-family:var(--mono);color:var(--text-3);margin-bottom:4px;letter-spacing:1px}
+.nav-item span{display:block;font-size:13.5px;color:var(--text);overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.nav-item.dim{opacity:.35;pointer-events:none}
+.origin-btn{display:flex;align-items:center;justify-content:center;gap:9px;height:50px;border-radius:14px;background:var(--grad);color:#fff;font-weight:500;font-size:15px;text-decoration:none;box-shadow:var(--glow);transition:.2s;margin-top:22px}
+.origin-btn:hover{filter:brightness(1.08);transform:translateY(-2px)}
+footer{margin-top:46px;padding-top:20px;border-top:1px solid var(--border);display:flex;justify-content:space-between;color:var(--text-3);font-size:12px;flex-wrap:wrap;gap:8px}
+footer .mono{font-family:var(--mono)}
+@media (max-width:560px){
+  .info-grid{grid-template-columns:1fr}
+  .nav-row{grid-template-columns:1fr}
+  .prose{padding:22px 20px}
+  .info-grid{padding:0 20px 20px}
+}
+</style>
+</head>
+<body>
+<div class="orb orb-1"></div><div class="orb orb-2"></div>
+<div class="page">
+  <nav class="top">
+    <a href="/"><svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 12H5M12 19l-7-7 7-7"/></svg>返回归档</a>
+    <span class="crumb">XHS · ARCHIVE</span>
+  </nav>
+
+  <header>
+    <h1 class="title">{{TITLE}}</h1>
+    <div class="meta-row">
+      <span class="mchip"><i></i>{{DATE}}</span>
+      <span class="mchip">{{TYPE}}</span>
+      {{TAGS_HTML}}
+    </div>
+  </header>
+
+  <section class="card">
+    <div class="prose">
+      {{CONTENT_HTML}}
+      <div class="hint" id="descHint" hidden>
+        <span>ⓘ</span>
+        <span>原帖正文需要<b>登录小红书</b>才能完整访问，机器人只记录了基本信息。<b>{{DESC}}</b> 若有摘要会展示在这里。</span>
+      </div>
+    </div>
+    <div class="info-grid">
+      <div class="info-item"><small>归档日期</small><span>{{DATE}}</span></div>
+      <div class="info-item"><small>内容类型</small><span>{{TYPE}}</span></div>
+      <div class="info-item"><small>归档编号</small><span>#{{INDEX}} / {{TOTAL}}</span></div>
+      <div class="info-item"><small>原帖链接</small><span><a href="{{URL}}" target="_blank" rel="noopener">{{URL}}</a></span></div>
+    </div>
+  </section>
+
+  <nav class="nav-row">
+    <a class="nav-item" id="prevItem" href="{{PREV_URL}}"><small>← 上一篇</small><span>{{PREV_TITLE}}</span></a>
+    <a class="nav-item" id="nextItem" href="{{NEXT_URL}}"><small>下一篇 →</small><span>{{NEXT_TITLE}}</span></a>
+  </nav>
+
+  <a class="origin-btn" href="{{URL}}" target="_blank" rel="noopener">在小红书查看原帖 ↗</a>
+
+  <footer>
+    <span>小红书内容归档 · hksoft.online</span>
+    <span class="mono">{{SLUG}}</span>
+  </footer>
+</div>
+<script>
+/* 占位符容错：cowAgent 未填充的可选字段自动降级隐藏 */
+(function(){
+  var unresolved = document.body.innerHTML.indexOf('{{') > -1;
+  if(unresolved){
+    document.querySelectorAll('.prose *').forEach(function(el){
+      if(el.textContent.indexOf('{{') > -1 && el.className.indexOf('hint') === -1) el.style.display = 'none';
+    });
+  }
+  if(!'{{DESC}}'.trim() || '{{DESC}}' === '%7B%7BDESC%7D%7D'){
+    var h = document.getElementById('descHint'); if(h) h.hidden = false;
+  }
+  var pi = document.getElementById('prevItem');
+  if(pi && (pi.getAttribute('href').indexOf('{{') === 0 || pi.getAttribute('href') === '#')) pi.classList.add('dim');
+  var ni = document.getElementById('nextItem');
+  if(ni && (ni.getAttribute('href').indexOf('{{') === 0 || ni.getAttribute('href') === '#')) ni.classList.add('dim');
+})();
+</script>
+</body>
+</html>
