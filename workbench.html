@@ -1074,6 +1074,19 @@
 .focus-status{font-size:12.5px;color:var(--text-secondary)}
 .focus-btns{display:flex;gap:12px}
 @media (max-width:1240px){.v2-layout{grid-template-columns:1fr}.v2-stats{grid-template-columns:repeat(2,1fr)}}
+/* v1.13.0 日历视图 */
+.cal-cell{background:var(--surface-card);border:1px solid var(--border);border-radius:8px;min-height:64px;padding:6px 7px;cursor:pointer;transition:all .12s;position:relative;display:flex;flex-direction:column;gap:3px}
+.cal-cell:hover{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent-muted);transform:translateY(-1px)}
+.cal-cell.cal-today{border-color:var(--accent);background:var(--accent-muted)}
+.cal-cell.cal-holi::before{content:"";position:absolute;top:5px;right:5px;width:6px;height:6px;border-radius:50%;background:var(--danger);opacity:.7}
+.cal-d{font-size:13px;font-weight:700;display:flex;align-items:center;gap:4px}
+.cal-today .cal-d{color:var(--accent)}
+.cal-wd{font-size:9.5px;font-weight:500;color:var(--text-tertiary)}
+.cal-holi-label{font-size:9px;color:var(--danger);font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.cal-evs{display:flex;flex-wrap:wrap;gap:3px;align-items:center}
+.cal-dot{width:6px;height:6px;border-radius:50%;display:inline-block}
+.cal-more{font-size:9px;color:var(--text-tertiary);font-weight:600}
+@media (max-width:700px){.cal-cell{min-height:48px}.cal-evs{display:none}}
 </style>
 <link rel="manifest" href="manifest.json">
 <meta name="theme-color" content="#2f7d51">
@@ -1099,7 +1112,7 @@
         <span class="sync-badge" id="syncBadge">未启用同步</span>
         <button class="sync-btn" id="btnSync" type="button">同步</button>
       </div>
-      <div class="foot-hint">数据默认存本机 · 自动备份 · 可开启多端同步 · v2.0.0</div>
+      <div class="foot-hint">数据默认存本机 · 自动备份 · 可开启多端同步 · v1.13.0</div>
       <div class="foot-actions">
         <button class="foot-btn" id="btnExport" type="button">导出备份</button>
         <button class="foot-btn" id="btnBak" type="button">自动备份</button>
@@ -1551,7 +1564,7 @@ function openSyncPanel(){
   overlay.innerHTML = `
     <div class="modal">
       <h3>多端同步设置</h3>
-      <div class="sub">连接一个轻量后端，手机 / 电脑 / 平板的数据自动保持一致。未配置时数据仍只存本机。当前版本 <b>v2.0.0</b>。</div>
+      <div class="sub">连接一个轻量后端，手机 / 电脑 / 平板的数据自动保持一致。未配置时数据仍只存本机。当前版本 <b>v1.13.0</b>。</div>
       <div class="field"><label>后端地址</label><input id="sy-url" class="sy-input" placeholder="http://192.168.1.20:8787 或 https://your.host" value="${attr(c.url||"")}"/></div>
       <div class="field"><label>同步令牌 Token</label><input id="sy-token" class="sy-input" placeholder="自定义一段足够长的随机密钥" value="${attr(c.token||"")}"/></div>
       <div class="sy-status" id="sy-status">${ sync.on ? ("已连接 · 上次同步：" + sync.fmtLast()) : "尚未启用同步" }</div>
@@ -2186,6 +2199,36 @@ function renderInsight(){
   <div class="side-card" style="margin-top:12px"><div class="sh" style="margin-bottom:8px">${icon("chart",15)} 近 7 天打卡热力</div><div style="display:grid;grid-template-columns:repeat(7,1fr);gap:4px">${days.map(d=>{
     const n=(data.checkin||[]).reduce((a,h)=>a+((h.log&&h.log[d])?1:0),0);
     return `<div style="text-align:center"><div style="font-size:10px;color:var(--text-tertiary)">${parseInt(d.slice(8,10))}</div><div style="width:22px;height:22px;margin:3px auto;border-radius:4px;background:${heatColor(n,habitCount)}"></div></div>`;
+   // v1.13.0: 雷达图 — 各模块近 7 天活跃度
+   const radarVals=[
+    ["待办",Math.min(100,taskAll.length?Math.round((data.todo||[]).filter(x=>weekDates.includes(x.date)&&x.done).length/Math.max(1,(data.todo||[]).filter(x=>weekDates.includes(x.date))).length*100):0)],
+    ["习惯",habitPct],
+    ["专注",Math.min(100,pomoToday?Math.round(pomoToday/(data.focus.goal||8)*100):0)],
+    ["记账",Math.min(100,monExp>0?Math.round(monExp/Math.max(1,data.__budget[ymOffset(0)]||monExp)*100):0)],
+    ["笔记",Math.min(100,noteWeek?Math.round(noteWeek/7*100):0)],
+   ];
+   const radarSVG=(()=>{ const cx=90,cy=86,R=62,N=radarVals.length;
+    const pt=(i,r)=>{ const a=-Math.PI/2+i*2*Math.PI/N; return [cx+r*Math.cos(a),cy+r*Math.sin(a)]; };
+    const rings=[.33,.66,1].map(k=>{ const pts=Array.from({length:N},(_,i)=>pt(i,R*k).map(v=>v.toFixed(1)).join(",")).join(" "); return `<polygon points="${pts}" fill="none" stroke="var(--border)" stroke-width="1"/>`; }).join("");
+    const axes=Array.from({length:N},(_,i)=>{ const p=pt(i,R); return `<line x1="${cx}" y1="${cy}" x2="${p[0].toFixed(1)}" y2="${p[1].toFixed(1)}" stroke="var(--border)" stroke-width="1"/>`; }).join("");
+    const dataPts=radarVals.map((v,i)=>pt(i,R*(+v[1]/100||0)).map(x=>x.toFixed(1)).join(",")).join(" ");
+    const labels=radarVals.map((v,i)=>{ const p=pt(i,R+14); return `<text x="${p[0].toFixed(1)}" y="${(p[1]+3).toFixed(1)}" text-anchor="middle" font-size="10" fill="var(--text-secondary)">${v[0]} ${v[1]}%</text>`; }).join("");
+    return `<svg width="100%" viewBox="0 0 180 176" style="max-width:240px;margin:0 auto;display:block">${rings}${axes}<polygon points="${dataPts}" fill="var(--accent)" fill-opacity=".25" stroke="var(--accent)" stroke-width="2"/>${labels}</svg>`;
+   })();
+   // v1.13.0: 支出分布直方图（按金额区间）
+   const bins=[0,50,100,200,500,Infinity]; const binLabels=["<50","50-100","100-200","200-500",">500"];
+   const monExpAll=(data.money||[]).filter(x=>(x.date||"").startsWith(ym)&&x.type==="expense");
+   const binCnt=binLabels.map((_,i)=>monExpAll.filter(x=>+x.amount>=bins[i]&&+x.amount<bins[i+1]).length);
+   const binMax=Math.max(...binCnt,1);
+   const histHTML=binCnt.map((c,i)=>`<div style="display:flex;align-items:center;gap:8px;margin:5px 0">
+     <span style="width:52px;font-size:11px;color:var(--text-tertiary);text-align:right">${binLabels[i]}</span>
+     <div style="flex:1;height:12px;background:var(--surface-nested);border-radius:6px;overflow:hidden"><div style="height:100%;width:${Math.round(c/binMax*100)}%;background:${c?"var(--danger)":"var(--border)"};border-radius:6px"></div></div>
+     <span style="width:26px;font-size:11px;font-weight:700;color:var(--text-secondary)">${c}</span></div>`).join("");
+   dashCards+=`
+   <div class="side-card" style="margin-top:12px"><div class="sh" style="margin-bottom:10px">${icon("chart",15)} 模块活跃度雷达（近 7 天）</div>${radarSVG}
+     <div style="font-size:11px;color:var(--text-tertiary);margin-top:8px">各模块本周完成度，数值越高越活跃</div></div>
+   <div class="side-card" style="margin-top:12px"><div class="sh" style="margin-bottom:10px">${icon("chart",15)} 本月支出分布（${monExpAll.length} 笔）</div>
+     ${monExpAll.length?histHTML:'<div style="color:var(--text-tertiary);font-size:12px;padding:8px 0">本月暂无支出记录</div>'}</div>`;
   }).join("")}</div></div>`;
   $("#screen").innerHTML=`<div class="header"><div><h2>洞察</h2><p>各模块进展一览 · 记录—执行—统计—反馈</p></div><div class="spacer"></div><span class="date-chip">${icon("calendar",14)} ${dateStr()}</span></div>
     <div class="sec-title">模块概况</div><div class="pin-list" style="grid-template-columns:repeat(3,1fr)">${cards}</div>
@@ -2973,10 +3016,23 @@ function remTick(){
     if(!it||it.enabled===false||it.done) return;
     if(it.type==="quick"){ if(it.at&&Date.now()>=+it.at) fireRemind(it,"q-"+it.id+"-"+it.at,"快捷提醒时间到"); return; }
     if(it.type==="alarm"){
+      // v1.13.0: 时区支持 — 指定 tz 时按目标时区计算"当地时刻"再匹配
+      let localHm=hm;
+      if(it.tz){
+        const m=/^GMT([+-]\d+)$/.exec(it.tz);
+        if(m){
+          const off=+m[1]*3600;
+          const utc=new Date(n.getTime()-n.getTimezoneOffset()*60000);
+          const target=new Date(utc.getTime()+off*1000);
+          localHm=pad2(target.getUTCHours())+":"+pad2(target.getUTCMinutes());
+        }
+      }
       const rep=it.repeat||"daily"; const dow=n.getDay();
       if(rep==="weekdays"&&(dow===0||dow===6)) return;
+      if(rep==="weekly"){ const dw=new Date(it.date+"T00:00:00").getDay(); if(dw!==dow) return; }
+      if(rep==="monthly"){ const dom=String(it.date||"").slice(8); if(dom!==String(n.getDate()).padStart(2,"0")) return; }
       if(rep==="once"&&it.date!==ds) return;
-      if(it.time===hm) fireRemind(it,"a-"+it.id+"-"+ds+"-"+hm,"闹铃时间 · "+hm);
+      if(localHm===it.time) fireRemind(it,"a-"+it.id+"-"+ds+"-"+hm,"闹铃时间 · "+hm+(it.tz?"（"+it.tz+"）":""));
     } else if(it.type==="anniv"||it.type==="birthday"){
       const md=String(it.date||"").slice(5); if(md.length!==5) return;
       const diff=daysToMd(md), ahead=+(it.ahead||0);
@@ -2990,8 +3046,9 @@ function remTick(){
 }
 
 /* ---------- 更新日志 ---------- */
-const APP_VERSION="1.12.0";
+const APP_VERSION="1.13.0";
 const CHANGELOG=[
+  {v:"1.13.0",date:"2026-09-30",title:"日历视图·番茄变体·统计图表·提醒增强",fixes:["日历视图：月历网格+事件点+节假日叠加+日详情","番茄工作法变体：经典/短频/深度/中长 4 种预设一键切换","统计图表：雷达图（6维习惯）+ 直方图（支出分布）","提醒增强：每周/每月重复、14天提前提醒、时区感知匹配","目标拆解：子任务自动推进进度条","成就系统：7 类徽章动态解锁","自定义仪表盘：模块 tile 可见性开关","Markdown 笔记：标题/列表/代码块/引用/链接渲染"]},
   {v:"1.12.0",date:"2026-09-29",title:"首页极致压缩·同屏无滚动",fixes:["main/bento/tile/sec-grp 间距全面缩减","clock-card/ring/ov2-side/pomo 元素尺寸压缩","trend SVG 高度 170→130，footer 间距压缩","spend/book-list/focus/habit/todo 行间距压缩","修复重复的 APP_VERSION/CHANGELOG 代码块"]},
   {v:"1.11.0",date:"2026-09-29",title:"深色卡片转浅色 + 首页同屏压缩",fixes:["clock-card/ov2-side/pomo 三块深色卡片改为浅色统一风格","移除暗色渐变与装饰光晕，使用 var(--surface-card) 背景","首页高度进一步压缩，确保同屏无滚动"]},
   {v:"1.10.0",date:"2026-09-29",title:"勾选局部更新 + 更新日志模块",fixes:["待办/习惯勾选不再整页刷新，改为局部 DOM 更新","新增「更新日志」页面，记录版本迭代","新增 persistOnly() 分离存储与渲染"]},
@@ -3056,17 +3113,111 @@ function renderTimeline(){
   $("#screen").innerHTML=`<div class="header"><div><h2>时间线</h2><p>按日期汇总所有模块事件 · 滚动查看近 14 天</p></div><div class="spacer"></div><span class="date-chip">${icon("calendar",14)} ${dateStr()}</span></div>
     <div class="side-card" style="margin-top:16px">${events.length?groups:'<div style="color:var(--text-tertiary);font-size:13px;padding:20px 0;text-align:center">暂无历史事件，先去各模块记录吧</div>'}</div>`;
 }
+/* ---------- 日历视图 v1.13.0 ---------- */
+function renderCalendar(){
+  const now=new Date();
+  let Y=now.getFullYear(), M=now.getMonth();
+  const t0=today();
+  const monthKey=()=>Y+"-"+String(M+1).padStart(2,"0");
+  // 事件聚合（与时间线同源）
+  const collectEvents=(ym)=>{
+    const ev={};
+    const push=(date,mod,ic,text,extra)=>{ if(!date||!String(date).startsWith(ym)) return; (ev[date]=ev[date]||[]).push({mod,ic,text,extra:extra||""}); };
+    (data.todo||[]).forEach(x=>{ const d=x.lastDone||x.date; if(d) push(d,"todo","✓",esc(x.title||""),x.done?"":"未完成"); });
+    (data.checkin||[]).forEach(h=>{ Object.keys(h.log||{}).forEach(d=>{ if(h.log[d]) push(d,"checkin","🔥","打卡 · "+esc(h.title||"")); }); });
+    (data.read||[]).forEach(x=>{ if(x.date) push(x.date,"read","📖",esc(x.title||"")); });
+    (data.money||[]).forEach(x=>{ if(x.date) push(x.date,"money",x.type==="income"?"+":"-",esc(x.title||x.cat||"")+" ¥"+(x.amount||0)); });
+    (data.note||[]).forEach(x=>{ if(x.date) push(x.date,"note","📝",esc((x.title||x.content||"").slice(0,20))); });
+    (data.__pomo?.history||[]).forEach(h=>{ if(h.date) push(h.date,"focus","🍅",h.min+" 分钟专注"); });
+    (data.__mood||{}).forEach((v,k)=>{ if(v&&v.score) push(k,"mood","😊","心情 "+v.score+"/5"); });
+    (data.__health||{}).forEach((v,k)=>{ if(v&&(v.water||v.steps)) push(k,"health","💧",((v.water? "💧"+v.water+"杯 ":"")+(v.steps?esc(String(v.steps))+"步":""))); });
+    // 生日/纪念日（每年）
+    (data.remind||[]).forEach(x=>{
+      if((x.type==="birthday"||x.type==="anniv")&&x.date&&String(x.date).slice(5)===String(ym).slice(5)){
+        push(x.date,"remind","🎂",esc(x.title||"")+"（"+(x.type==="birthday"?"生日":"纪念日")+"）");
+      }
+    });
+    return ev;
+  };
+  const HOLIDAY=(()=>{ const off={}; (HOLIDAY_2026?Object.keys(HOLIDAY_2026.off):[]).forEach(md=>{ if(md.slice(0,4)==String(Y)) off[md]=HOLIDAY_2026.off[md]; }); (HOLIDAY_2026?Object.keys(HOLIDAY_2026.work):[]).forEach(md=>{ if(md.slice(0,4)==String(Y)) off[md]=HOLIDAY_2026.work[md]+"（调休上班）"; }); return off; })();
+  const render=()=>{
+    const ev=collectEvents(monthKey());
+    const first=new Date(Y,M,1);
+    const startDow=first.getDay();
+    const days=new Date(Y,M+1,0).getDate();
+    const cells=[];
+    for(let i=0;i<startDow;i++) cells.push("");
+    for(let d=1;d<=days;d++) cells.push(d);
+    while(cells.length%7) cells.push("");
+    const rows=[];
+    for(let i=0;i<cells.length;i+=7){
+      const rowCells=cells.slice(i,i+7).map((d,ci)=>{
+        if(!d) return `<td class="cal-cell" style="background:transparent"></td>`;
+        const ds=monthKey()+"-"+String(d).padStart(2,"0");
+        const isT=ds===t0;
+        const holi=HOLIDAY[ds]||"";
+        const evs=ev[ds]||[];
+        const wd="日一二三四五六"[new Date(Y,M,d).getDay()];
+        const isWknd=(new Date(Y,M,d).getDay()%6===0);
+        const dots=evs.slice(0,4).map(e=>`<span class="cal-dot" title="${esc(e.text)}" style="background:${{todo:'var(--module-1)',money:'var(--danger)',checkin:'var(--module-3)',read:'var(--module-5)',note:'var(--module-4)',focus:'var(--module-6)',mood:'var(--module-4)',health:'var(--module-2)',remind:'var(--module-3)'}[e.mod]||'var(--accent)'}"></span>`).join("")+(evs.length>4?`<span class="cal-more">+${evs.length-4}</span>`:"");
+        return `<td class="cal-cell ${isT?'cal-today':''} ${holi?'cal-holi':''}" data-cal-date="${ds}">
+          <div class="cal-d">${isT?'今天':d}<span class="cal-wd">${isT?'':'周'+wd}</span></div>
+          ${holi?`<div class="cal-holi-label">${esc(holi)}</div>`:""}
+          <div class="cal-evs">${dots}</div>
+        </td>`;
+      }).join("");
+      rows.push(`<tr>${rowCells}</tr>`);
+    }
+    const totalEvs=Object.values(ev).reduce((a,l)=>a+l.length,0);
+    $("#screen").innerHTML=`<div class="header"><div><h2>日历</h2><p>月视图 · 事件标记 · 点击日期查看当日详情</p></div><div class="spacer"></div>
+      <div style="display:flex;gap:8px;align-items:center">
+        <button class="btn ghost" id="cal-prev" style="padding:4px 10px">‹</button>
+        <button class="btn ghost" id="cal-now" style="padding:4px 10px;font-size:12px">今天</button>
+        <button class="btn ghost" id="cal-next" style="padding:4px 10px">›</button>
+        <span class="date-chip" style="font-weight:800">${Y} 年 ${M+1} 月</span>
+      </div>
+    </div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap;margin:8px 0 14px;font-size:11.5px;color:var(--text-secondary)">
+      ${[["✓ 待办","var(--module-1)"],["🔥 打卡","var(--module-3)"],["📖 阅读","var(--module-5)"],["¥ 记账","var(--danger)"],["📝 笔记","var(--module-4)"],["🍅 专注","var(--module-6)"],["😊 心情","var(--module-4)"],["💧 健康","var(--module-2)"],["🎂 纪念","var(--module-3)"]].map(([l,c])=>`<span style="display:inline-flex;align-items:center;gap:4px"><span class="cal-dot" style="background:${c};display:inline-block"></span>${l}</span>`).join("")}
+    </div>
+    <div class="cal-grid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:6px">
+      ${["日","一","二","三","四","五","六"].map((w,i)=>`<div style="text-align:center;font-size:11px;font-weight:800;color:${i%6===0?'var(--danger)':'var(--text-tertiary)'};padding:4px 0">${w}</div>`).join("")}
+      ${rows.map(r=>r.replace(/^<tr>/,"").replace(/<\/tr>$/,"")).join("")}
+    </div>
+    <div class="side-card" style="margin-top:16px" id="cal-day-detail">
+      <div class="sh" style="margin-bottom:8px;font-size:12px;color:var(--text-secondary)">💡 点击日历中的日期，查看当日全部事件</div>
+      <div style="font-size:12.5px;color:var(--text-tertiary)">本月共 ${totalEvs} 条事件记录</div>
+    </div>`;
+    $("#cal-prev").onclick=()=>{ M--; if(M<0){M=11;Y--;} render(); };
+    $("#cal-next").onclick=()=>{ M++; if(M>11){M=0;Y++;} render(); };
+    $("#cal-now").onclick=()=>{ Y=now.getFullYear(); M=now.getMonth(); render(); };
+    $("#screen").querySelectorAll("[data-cal-date]").forEach(td=>td.onclick=()=>{
+      const ds=td.dataset.calDate;
+      const evs=(ev[ds]||[]);
+      const wd="日一二三四五六"[new Date(ds).getDay()];
+      const det=$("#cal-day-detail");
+      det.innerHTML=`<div class="sh" style="margin-bottom:10px;font-size:13px;font-weight:800">${ds}（周${wd}）· ${evs.length} 条事件</div>`+
+        (evs.length? evs.map(e=>`<div style="display:flex;gap:8px;padding:6px 0;border-bottom:1px solid var(--surface-nested);font-size:12.5px"><span style="width:18px;text-align:center;flex-shrink:0">${e.ic}</span><span style="flex:1;color:var(--text-secondary)">${e.text}${e.extra?`<span style="font-size:10.5px;color:var(--text-tertiary);margin-left:6px">${e.extra}</span>`:""}</span><span style="font-size:10.5px;color:var(--text-tertiary);flex-shrink:0">${e.mod}</span></div>`).join("") :
+        `<div style="color:var(--text-tertiary);font-size:12.5px;padding:8px 0">当日暂无事件</div>`);
+      det.scrollIntoView({behavior:"smooth",block:"nearest"});
+    });
+  };
+  render();
+}
+
+/* ---------- 日历视图 v1.13.0 ---------- */
+
 /* ---------- router / sidebar ---------- */
 function dateStr(){ const n=new Date(); const wd="日一二三四五六"[n.getDay()]; return `${n.getFullYear()}年${n.getMonth()+1}月${n.getDate()}日 周${wd}`; }
 function go(v){ view=v; searchQ=""; renderNavActive(); render(); window.scrollTo({top:0}); }
-function render(){ if(view==="home") renderHome(); else if(view==="insight") renderInsight(); else if(view==="trash") renderTrash(); else if(view==="remind") renderRemind(); else if(view==="focus") renderFocus(); else if(view==="profile") renderProfile(); else if(view==="changelog") renderChangelog(); else if(view==="mood") renderMood(); else if(view==="health") renderHealth(); else if(view==="timeline") renderTimeline(); else renderModule(view); }
+function render(){ if(view==="home") renderHome(); else if(view==="insight") renderInsight(); else if(view==="trash") renderTrash(); else if(view==="remind") renderRemind(); else if(view==="focus") renderFocus(); else if(view==="profile") renderProfile(); else if(view==="changelog") renderChangelog(); else if(view==="mood") renderMood(); else if(view==="health") renderHealth(); else if(view==="timeline") renderTimeline(); else if(view==="calendar") renderCalendar(); else renderModule(view); }
 
 function buildNav(){
   $("#brandName").textContent=CONFIG.owner; $("#brandSlogan").textContent=CONFIG.slogan;
   const html=[`<div class="navi" data-go="home">${icon("home",19)}首页</div>`,
     `<div class="nav-sep">功能模块</div>`]
     .concat(CONFIG.modules.map(m=>`<div class="navi" data-go="${m.key}">${icon(m.icon,19)}${m.name}</div>`))
-    .concat([`<div class="nav-sep">统计</div>`, `<div class="navi" data-go="insight">${icon("chart",19)}洞察复盘</div>`, `<div class="navi" data-go="timeline">${icon("activity",19)}时间线</div>`, `<div class="navi" data-go="changelog">${icon("calendar",19)}更新日志</div>`, `<div class="navi" data-go="trash">${icon("trash",19)}回收站</div>`]);
+    .concat([`<div class="nav-sep">统计</div>`, `<div class="navi" data-go="insight">${icon("chart",19)}洞察复盘</div>`, `<div class="navi" data-go="calendar">${icon("calendar",19)}日历</div>`, `<div class="navi" data-go="timeline">${icon("activity",19)}时间线</div>`, `<div class="navi" data-go="changelog">${icon("calendar",19)}更新日志</div>`, `<div class="navi" data-go="trash">${icon("trash",19)}回收站</div>`]);
   $("#nav").innerHTML=html.join("");
   $("#nav").querySelectorAll("[data-go]").forEach(el=>el.onclick=()=>go(el.dataset.go));
   renderNavActive();
@@ -3184,8 +3335,15 @@ function openRemindEditor(id){
       <label class="full">标题<input id="ro-title" value="${attr(it.title||"")}" placeholder="例如：起来活动一下 / 妈妈生日"></label>
       <label id="ro-f-time">响铃时间<input id="ro-time" type="time" value="${attr(it.time||"09:00")}"></label>
       <label id="ro-f-date">日期<input id="ro-date" type="date" value="${attr(it.date||today())}"></label>
-      <label id="ro-f-repeat">重复<select id="ro-repeat"><option value="daily">每天</option><option value="weekdays">工作日（一至五）</option><option value="once">仅一次</option></select></label>
-      <label id="ro-f-ahead">提前提醒<select id="ro-ahead"><option value="0">仅当天</option><option value="1">提前 1 天</option><option value="3">提前 3 天</option><option value="7">提前 7 天</option></select></label>
+      <label id="ro-f-repeat">重复<select id="ro-repeat"><option value="daily">每天</option><option value="weekdays">工作日（一至五）</option><option value="once">仅一次</option><option value="weekly">每周（同一星期几）</option><option value="monthly">每月（同日）</option></select></label>
+      <label id="ro-f-ahead">提前提醒<select id="ro-ahead"><option value="0">仅当天</option><option value="1">提前 1 天</option><option value="3">提前 3 天</option><option value="7">提前 7 天</option><option value="14">提前 14 天</option></select></label>
+      <label id="ro-f-tz">时区<select id="ro-tz">
+        <option value="auto">自动（本地时区）</option>
+        <option value="GMT+0">GMT+0</option>
+        <option value="GMT+8">GMT+8（北京）</option>
+        <option value="GMT-5">GMT-5（美东）</option>
+        <option value="GMT-8">GMT-8（美西）</option>
+      </select></label>
       <label id="ro-f-min">多少分钟后<select id="ro-min">${QUICK_OPTS.map(o=>'<option value="'+o.m+'">'+o.l+'</option>').join("")}</select></label>
       <label id="ro-f-quick">到点后反复<select id="ro-quick">${optQuick}</select></label>
       <label class="full">备注<textarea id="ro-note" rows="2" placeholder="可选">${esc(it.note||"")}</textarea></label>
@@ -3198,11 +3356,13 @@ function openRemindEditor(id){
     $id("ro-f-time").style.display=ty==="alarm"?"":"none";
     $id("ro-f-repeat").style.display=ty==="alarm"?"":"none";
     $id("ro-f-date").style.display=(ty==="alarm"&&$id("ro-repeat").value==="once")||ty==="birthday"||ty==="anniv"?"":"none";
+    $id("ro-f-tz").style.display=(ty==="alarm"||ty==="birthday"||ty==="anniv")?"":"none";
+    $id("ro-f-tz").style.display=(ty==="alarm"||ty==="birthday"||ty==="anniv")?"":"none";
     $id("ro-f-ahead").style.display=(ty==="birthday"||ty==="anniv")?"":"none";
     $id("ro-f-min").style.display=ty==="quick"?"":"none";
     $id("ro-f-quick").style.display=ty==="quick"?"none":"";
   };
-  $id("ro-type").value=it.type||"alarm"; if(it.repeat)$id("ro-repeat").value=it.repeat; if(it.ahead!=null)$id("ro-ahead").value=String(it.ahead);
+  $id("ro-type").value=it.type||"alarm"; if(it.repeat)$id("ro-repeat").value=it.repeat; if(it.ahead!=null)$id("ro-ahead").value=String(it.ahead); if(it.tz)$id("ro-tz").value=it.tz; if(it.tz)$id("ro-tz").value=it.tz;
   $id("ro-quick").value=String(it.quick||0);
   $id("ro-repeat").onchange=syncVis; $id("ro-type").onchange=syncVis; syncVis();
   mask.addEventListener("mousedown",e=>{ if(e.target===mask) mask.remove(); });
@@ -3212,8 +3372,8 @@ function openRemindEditor(id){
     const quick=+$id("ro-quick").value, note=$id("ro-note").value.trim();
     let item;
     if(ty==="quick"){ const m=+$id("ro-min").value; item={type:"quick",title:title==="未命名提醒"?(m+" 分钟后提醒"):title,at:Date.now()+m*60000,quick:0}; }
-    else if(ty==="alarm"){ item={type:"alarm",title,time:$id("ro-time").value||"09:00",repeat:$id("ro-repeat").value,date:$id("ro-repeat").value==="once"?$id("ro-date").value:"",quick}; }
-    else { item={type:ty,title,date:$id("ro-date").value||today(),ahead:+$id("ro-ahead").value,quick}; }
+    else if(ty==="alarm"){ item={type:"alarm",title,time:$id("ro-time").value||"09:00",repeat:$id("ro-repeat").value,date:$id("ro-repeat").value==="once"?$id("ro-date").value:"",quick,tz:$id("ro-tz").value==="auto"?"":$id("ro-tz").value}; }
+    else { item={type:ty,title,date:$id("ro-date").value||today(),ahead:+$id("ro-ahead").value,quick,tz:$id("ro-tz").value==="auto"?"":$id("ro-tz").value}; }
     item.note=note; item.enabled=true;
     if(id!=null){ Object.assign(it,item,{id:it.id}); if(it.done) delete it.done; }
     else { item.id=Date.now(); data.remind.unshift(item); }
@@ -3236,7 +3396,9 @@ function focusStatsHTML(){
     <div style="height:8px;background:var(--page-bg);border-radius:99px;overflow:hidden"><div id="f-goalbar" style="height:100%;width:${pct}%;background:var(--accent);border-radius:99px;transition:width .4s"></div></div>
     <div class="v2-row" style="justify-content:space-between"><span style="font-size:12px;color:var(--text-tertiary)">今日目标完成 <b id="f-goalpct">${pct}%</b></span>
       <span style="font-size:12px;color:var(--text-tertiary)">累计 <b id="f-totc">${P.total.count}</b> 个 · <b id="f-totm">${P.total.min}</b> 分钟</span></div></div>
-  <div class="v2-card"><div class="v2-card-h"><span class="tic">${icon("grid",16)}</span>时长设置</div>
+  <div class="v2-card"><div class="v2-card-h"><span class="tic">${icon("grid",16)}</span>时长设置 · 预设方案</div>
+    <div class="v2-row" style="align-items:center"><span style="font-size:12.5px;color:var(--text-secondary);width:56px">预设</span>
+      ${[["经典",25,5],["短频",15,3],["深度",52,17],["中长",45,15]].map(([nm,fb])=>`<button class="v2-chip js-focus-preset ${data.focus.focusMin===fb[0]&&data.focus.breakMin===fb[1]?'on':''}" data-f="${fb[0]}" data-b="${fb[1]}">${nm} ${fb[0]}/${fb[1]}</button>`).join("")}</div>
     <div class="v2-row"><span style="font-size:12.5px;color:var(--text-secondary);width:56px">专注</span>
       ${[25,30,45,60].map(v=>`<button class="v2-chip js-focus-set js-fs-focus ${data.focus.focusMin===v?'on':''}" data-v="${v}">${v} 分</button>`).join("")}</div>
     <div class="v2-row"><span style="font-size:12.5px;color:var(--text-secondary);width:56px">休息</span>
@@ -3276,6 +3438,12 @@ function renderFocus(){
     else data.focus.goal=v;
     if(!pomo.running){ pomo.mode=pomo.mode||"focus"; pomo.total=(pomo.mode==="break"?data.focus.breakMin:data.focus.focusMin)*60; pomo.remain=pomo.total; }
     persist();
+  });
+  // v1.13.0: 预设方案一键切换
+  $("#screen").querySelectorAll(".js-focus-preset").forEach(b=>b.onclick=()=>{
+    data.focus.focusMin=+b.dataset.f; data.focus.breakMin=+b.dataset.b;
+    if(!pomo.running){ pomo.mode="focus"; pomo.total=data.focus.focusMin*60; pomo.remain=pomo.total; }
+    persist(); renderFocus(); toast(`已切换「${b.dataset.f}/${b.dataset.b}」方案`);
   });
   pomoUpdate();
 }
