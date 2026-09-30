@@ -2151,6 +2151,34 @@ function renderInsight(){
     ${rankList}
   </div>`;
 
+  // v1.13.0: 成就系统
+  data.__ach=data.__ach||{};
+  const t0=today();
+  const bestStreak=(data.checkin||[]).reduce((a,h)=>Math.max(a,streak(h.log||{})),0);
+  const achDefs=[
+    {id:"chk7",emoji:"🌱",name:"七日坚持",desc:"任意习惯连续打卡 7 天",ok:bestStreak>=7},
+    {id:"chk30",emoji:"🔥",name:"三十天挑战",desc:"任意习惯连续打卡 30 天",ok:bestStreak>=30},
+    {id:"pomo10",emoji:"🍅",name:"专注新手",desc:"累计完成 10 个番茄",ok:(data.__pomo&&data.__pomo.total?data.__pomo.total.count:0)>=10},
+    {id:"pomo100",emoji:"🏆",name:"百茄之王",desc:"累计完成 100 个番茄",ok:(data.__pomo&&data.__pomo.total?data.__pomo.total.count:0)>=100},
+    {id:"money90",emoji:"💰",name:"记账 90 天",desc:"累计记录 90 天收支",ok:new Set((data.money||[]).map(x=>x.date).filter(Boolean)).size>=90},
+    {id:"note20",emoji:"✍️",name:"灵感收集者",desc:"累计 20 条笔记",ok:(data.note||[]).length>=20},
+    {id:"todo30",emoji:"✅",name:"三十而立",desc:"累计完成 30 项待办",ok:(data.todo||[]).filter(x=>x.done).length>=30},
+  ];
+  const achUnlocked=achDefs.filter(a=>a.ok&&data.__ach[a.id]).length;
+  const achCard=`<div class="side-card" style="margin-top:12px">
+    <div class="sh" style="margin-bottom:10px">${icon("flame",15)} 成就徽章 <span style="font-size:11px;color:var(--text-tertiary);margin-left:auto">${achUnlocked}/${achDefs.length}</span></div>
+    <div style="display:grid;grid-template-columns:repeat(2,1fr);gap:8px">${achDefs.map(a=>{
+      const un=!!data.__ach[a.id];
+      return `<div style="display:flex;align-items:center;gap:7px;padding:7px 9px;border-radius:8px;background:var(--surface-nested);opacity:${un?1:.45}">
+        <span style="font-size:18px">${a.emoji}</span>
+        <div style="min-width:0"><div style="font-size:12px;font-weight:700;color:${un?'var(--text)':'var(--text-tertiary)'}">${a.name}</div>
+        <div style="font-size:10px;color:var(--text-tertiary)">${a.desc}</div></div>
+        ${un?`<span style="margin-left:auto;font-size:10px;color:var(--module-1);font-weight:800">已解锁</span>`:''}
+      </div>`;}).join("")}</div>
+    <div style="font-size:12px;color:var(--text-secondary)">已完成 ${achUnlocked}/${achDefs.length} 枚徽章 · 达成条件自动判定，下次刷新重新计算</div>
+  </div>`;
+  achDefs.forEach(a=>{ if(a.ok && !data.__ach[a.id]){ data.__ach[a.id]=t0; store.save(); } });
+
   // v1.13.0: 多图表仪表盘数据
   const habitCount=(data.checkin||[]).length;
   const habitPct=habitCount?Math.round((data.checkin||[]).filter(h=>weekDates.some(d=>h.log&&h.log[d])).length/habitCount*100):0;
@@ -2190,6 +2218,7 @@ function renderInsight(){
   $("#screen").innerHTML=`<div class="header"><div><h2>洞察</h2><p>各模块进展一览 · 记录—执行—统计—反馈</p></div><div class="spacer"></div><span class="date-chip">${icon("calendar",14)} ${dateStr()}</span></div>
     <div class="sec-title">模块概况</div><div class="pin-list" style="grid-template-columns:repeat(3,1fr)">${cards}</div>
     ${dashCards}
+    ${achCard}
     <div class="mod-layout"><div class="mod-main"></div><aside class="mod-side">${weekReport}${monReport}${rankCard}</aside></div>`;
   $("#screen").querySelectorAll("[data-open]").forEach(el=>el.onclick=()=>go(el.dataset.open));
 }
