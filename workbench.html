@@ -1249,10 +1249,6 @@ const CONFIG = {
       seed:[] },
     { key:"health", name:"健康追踪", icon:"heart", tint:"#e8f5f0", color:"#3a9d8f", type:"health", desc:"饮水 · 步数 · 睡眠 · 每日目标",
       seed:[] },
-    { key:"mood", name:"心情追踪", icon:"smile", tint:"#fdf3e8", color:"#e0954f", type:"mood", desc:"每日 1-5 分自评 · 情绪标签 · 周趋势",
-      seed:[] },
-    { key:"health", name:"健康追踪", icon:"heart", tint:"#e8f5f0", color:"#3a9d8f", type:"health", desc:"饮水 · 步数 · 睡眠 · 每日目标",
-      seed:[] },
   ],
 };
 
@@ -3092,9 +3088,9 @@ function renderTimeline(){
   // 番茄
   (data.__pomo?.history||[]).forEach(h=>{ if(h.date) push(h.date,"focus","var(--module-6)","🍅",h.min+" 分钟专注"); });
   // 心情
-  (data.__mood||{}).forEach((v,k)=>{ if(v&&v.score) push(k,"mood","var(--module-4)","😊","心情 "+v.score+"/5"+(v.tags&&v.tags.length?" · "+esc(v.tags.join(" ")):"")); });
+  const moods=data.__mood; if(moods&&!Array.isArray(moods)&&typeof moods==="object") Object.keys(moods).forEach(k=>{ const v=moods[k]; if(v&&v.score) push(k,"mood","var(--module-4)","😊","心情 "+v.score+"/5"+(v.tags&&v.tags.length?" · "+esc(v.tags.join(" ")):"")); });
   // 健康
-  (data.__health||{}).forEach((v,k)=>{ if(v&&(v.water||v.steps)) push(k,"health","var(--module-2)","💧",((v.water? "💧"+v.water+"杯 ":"")+(v.steps?esc(String(v.steps))+"步":""))); });
+  const healths=data.__health; if(healths&&!Array.isArray(healths)&&typeof healths==="object") Object.keys(healths).forEach(k=>{ const v=healths[k]; if(v&&(v.water||v.steps)) push(k,"health","var(--module-2)","💧",((v.water? "💧"+v.water+"杯 ":"")+(v.steps?esc(String(v.steps))+"步":""))); });
   events.sort((a,b)=>b.date.localeCompare(a.date));
   // 按日期分组，取最近 14 天
   const byDate={}; const daysList=[];
@@ -3129,8 +3125,8 @@ function renderCalendar(){
     (data.money||[]).forEach(x=>{ if(x.date) push(x.date,"money",x.type==="income"?"+":"-",esc(x.title||x.cat||"")+" ¥"+(x.amount||0)); });
     (data.note||[]).forEach(x=>{ if(x.date) push(x.date,"note","📝",esc((x.title||x.content||"").slice(0,20))); });
     (data.__pomo?.history||[]).forEach(h=>{ if(h.date) push(h.date,"focus","🍅",h.min+" 分钟专注"); });
-    (data.__mood||{}).forEach((v,k)=>{ if(v&&v.score) push(k,"mood","😊","心情 "+v.score+"/5"); });
-    (data.__health||{}).forEach((v,k)=>{ if(v&&(v.water||v.steps)) push(k,"health","💧",((v.water? "💧"+v.water+"杯 ":"")+(v.steps?esc(String(v.steps))+"步":""))); });
+    const cm=data.__mood; if(cm&&!Array.isArray(cm)&&typeof cm==="object") Object.keys(cm).forEach(k=>{ const v=cm[k]; if(v&&v.score) push(k,"mood","😊","心情 "+v.score+"/5"); });
+    const ch=data.__health; if(ch&&!Array.isArray(ch)&&typeof ch==="object") Object.keys(ch).forEach(k=>{ const v=ch[k]; if(v&&(v.water||v.steps)) push(k,"health","💧",((v.water? "💧"+v.water+"杯 ":"")+(v.steps?esc(String(v.steps))+"步":""))); });
     // 生日/纪念日（每年）
     (data.remind||[]).forEach(x=>{
       if((x.type==="birthday"||x.type==="anniv")&&x.date&&String(x.date).slice(5)===String(ym).slice(5)){
@@ -3549,13 +3545,14 @@ function renderHealth(){
       </div>
     </div>`;};
   const weekChart=(get)=>{
-    const max=Math.max(...days.map(d=>get(h[d])||0),1);
+    const safe=(d)=>h[d]&&typeof h[d]==="object"?h[d]:{};
+    const max=Math.max(...days.map(d=>get(safe(d))||0),1);
     return days.map(d=>{
-      const v=get(h[d])||0;
+      const v=get(safe(d))||0;
       const hgt=Math.round(v/max*80);
       return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px">
         <div style="width:22px;height:80px;background:var(--surface-nested);border-radius:4px;display:flex;align-items:flex-end;overflow:hidden">
-          <div style="width:100%;height:${hgt}px;background:${get(h[d])?"#3a9d8f":"transparent"};border-radius:3px"></div>
+          <div style="width:100%;height:${hgt}px;background:${get(safe(d))?"#3a9d8f":"transparent"};border-radius:3px"></div>
         </div>
         <span style="font-size:10px;color:var(--text-tertiary)">${["日","一","二","三","四","五","六"][new Date(d+"T00:00:00").getDay()]}</span>
       </div>`;}).join("");
