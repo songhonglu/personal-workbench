@@ -2061,63 +2061,6 @@ function drawSharePNG(){
 }
 
 /* ---------- SHARE PNG ---------- */
-function drawSharePNG(){
-  const W=1080, H=1350;
-  const c=document.createElement("canvas"); c.width=W; c.height=H;
-  const ctx=c.getContext("2d");
-  // bg
-  const g=ctx.createLinearGradient(0,0,0,H);
-  g.addColorStop(0,"#f0f2f5"); g.addColorStop(1,"#e8ebf0");
-  ctx.fillStyle=g; ctx.fillRect(0,0,W,H);
-  // header
-  ctx.fillStyle="#2c4a7c"; ctx.fillRect(0,0,W,180);
-  ctx.fillStyle="#fff"; ctx.font="800 32px system-ui,sans-serif";
-  ctx.fillText("我的工作台 · "+dateStr(), 40, 80);
-  ctx.font="400 18px system-ui,sans-serif"; ctx.fillStyle="rgba(255,255,255,.8)";
-  ctx.fillText(new Date().toLocaleDateString("zh-CN",{year:"numeric",month:"long",day:"numeric",weekday:"long"}), 40, 120);
-  ctx.fillText("第 "+weekNum()+" 周 · 生成于 "+new Date().toLocaleTimeString("zh-CN",{hour:"2-digit",minute:"2-digit"}), 40, 150);
-  // stats cards
-  const ym=ymOffset(0);
-  const todoDone=(data.todo||[]).filter(x=>x.done).length;
-  const todoAll=(data.todo||[]).length;
-  const chkDone=(data.checkin||[]).filter(x=>x.log&&x.log[today()]).length;
-  const chkAll=(data.checkin||[]).length;
-  const pomoCount=(data.__pomo?.today&&data.__pomo.today.date===today())?data.__pomo.today.count:0;
-  const monExp=(data.money||[]).filter(x=>(x.date||"").startsWith(ym)&&x.type==="expense").reduce((a,x)=>a+ +x.amount,0);
-  const cards=[
-    {label:"待办完成", val:`${todoDone}/${todoAll}`, col:"#5ea06f"},
-    {label:"习惯打卡", val:`${chkDone}/${chkAll}`, col:"#e07b4f"},
-    {label:"番茄钟", val:`${pomoCount} 个`, col:"#8a6db1"},
-    {label:"本月支出", val:`¥${monExp}`, col:"#d17a8f"}
-  ];
-  cards.forEach((cd,i)=>{
-    const cx=40+(i%2)*(W/2-20), cyi=220+Math.floor(i/2)*160, cw=(W-80)/2-10;
-    ctx.fillStyle="#fff"; ctx.strokeStyle="#e0e3ea"; ctx.lineWidth=1.5;
-    ctx.beginPath(); ctx.roundRect(cx,cyi,cw,130,16); ctx.fill(); ctx.stroke();
-    ctx.fillStyle=cd.col; ctx.font="800 40px system-ui,sans-serif";
-    ctx.fillText(cd.val, cx+24, cyi+72);
-    ctx.fillStyle="#6b7280"; ctx.font="400 16px system-ui,sans-serif";
-    ctx.fillText(cd.label, cx+24, cyi+104);
-  });
-  // recent notes
-  const notes=(data.note||[]).slice(0,3);
-  let ty=220+2*160+40;
-  ctx.fillStyle="#2c4a7c"; ctx.font="700 20px system-ui,sans-serif";
-  ctx.fillText("最近笔记", 40, ty); ty+=10;
-  ctx.font="400 15px system-ui,sans-serif";
-  notes.forEach((n,i)=>{
-    ty+=32;
-    ctx.fillStyle="#374151";
-    ctx.fillText((n.title||"未命名").slice(0,30), 40, ty);
-    ctx.fillStyle="#9ca3af";
-    ctx.fillText((n.content||"").slice(0,40), 40, ty+18);
-  });
-  if(!notes.length){ ctx.fillStyle="#9ca3af"; ctx.fillText("暂无笔记", 40, ty+18); }
-  // footer
-  ctx.fillStyle="rgba(0,0,0,.15)"; ctx.font="400 13px system-ui,sans-serif";
-  ctx.fillText("由 个人工作台 · GitHub Pages 生成 · "+today(), 40, H-30);
-  return c;
-}
 
 /* ---------- INSIGHT ---------- */
 function renderInsight(){
@@ -2206,6 +2149,7 @@ function renderInsight(){
     <div style="font-size:12px;color:var(--text-secondary)">已完成 ${achUnlocked}/${achDefs.length} 枚徽章 · 达成条件自动判定，下次刷新重新计算</div>
   </div>`;
   achDefs.forEach(a=>{ if(a.ok && !data.__ach[a.id]){ data.__ach[a.id]=t0; store.save(); } });
+
 
   // v1.13.0: 多图表仪表盘数据
   const habitCount=(data.checkin||[]).length;
@@ -3074,70 +3018,7 @@ function renderChangelog(){
 }
 
 /* ---------- 更新日志 ---------- */
-const APP_VERSION="1.12.0";
-const CHANGELOG=[
-  {v:"1.12.0",date:"2026-09-29",title:"首页极致压缩·同屏无滚动",fixes:["main/bento/tile/sec-grp 间距全面缩减","clock-card/ring/ov2-side/pomo 元素尺寸压缩","trend SVG 高度 170→130，footer 间距压缩","spend/book-list/focus/habit/todo 行间距压缩","修复重复的 APP_VERSION/CHANGELOG 代码块"]},
-  {v:"1.11.0",date:"2026-09-29",title:"深色卡片转浅色 + 首页同屏压缩",fixes:["clock-card/ov2-side/pomo 三块深色卡片改为浅色统一风格","移除暗色渐变与装饰光晕，使用 var(--surface-card) 背景","首页高度进一步压缩，确保同屏无滚动"]},
-  {v:"1.10.0",date:"2026-09-29",title:"勾选局部更新 + 更新日志模块",fixes:["待办/习惯勾选不再整页刷新，改为局部 DOM 更新","新增「更新日志」页面，记录版本迭代","新增 persistOnly() 分离存储与渲染"]},
-  {v:"1.9.9",date:"2026-09-29",title:"桌面首页空间压缩",fixes:["bento/tile/clock-card 间距与内边距全面缩减","消除首页纵向滚动，节省 ~200px"]},
-  {v:"1.9.8",date:"2026-09-29",title:"习惯追踪表未来日期禁勾",fixes:["今天之后日期不可勾选","友好提示「还没到周X，到当天才能打卡哦」","清理历史误勾的未来打卡记录"]},
-  {v:"1.9.7",date:"2026-09-29",title:"提醒中心统计一致性",fixes:["「共 X 条」改为可见条数，修复空列表显示 1 条","已触发快捷提醒自动清理"]},
-  {v:"1.9.6",date:"2026-09-29",title:"持久墓碑与强制同步",fixes:["删除记录跨端传播——清空回收站不丢删除","墓碑参与三端合并"]},
-  {v:"1.9.5",date:"2026-09-29",title:"同步墓碑机制",fixes:["删除条目不再被远端合并复活"]},
-];
-function renderChangelog(){
-  const rows=CHANGELOG.map(c=>{
-    const dots=c.fixes.map(f=>`<li>${esc(f)}</li>`).join("");
-    return `<div style="background:var(--surface-card);border:1px solid var(--border);border-radius:var(--radius-card);box-shadow:var(--shadow-card);padding:14px 20px">
-      <div style="display:flex;align-items:center;gap:10px;margin-bottom:6px">
-        <span style="font-size:12.5px;font-weight:800;color:var(--accent);background:var(--accent-muted);padding:2px 10px;border-radius:20px;flex:0 0 auto">v${c.v}</span>
-        <span style="font-size:14px;font-weight:700">${esc(c.title)}</span>
-        <span style="margin-left:auto;font-size:12px;color:var(--text-tertiary);flex:0 0 auto">${c.date}</span>
-      </div>
-      <ul style="margin:0;padding-left:18px;font-size:13px;color:var(--text-secondary);line-height:1.7">${dots}</ul>
-    </div>`;
-  }).join("");
-  $("#screen").innerHTML=`<div class="header"><div><h2>更新日志</h2><p>当前版本 v${APP_VERSION} · 记录每次迭代与改进</p></div><div class="spacer"></div><span class="date-chip">${icon("activity",14)} ${CHANGELOG.length} 个版本</span></div>
-    <div style="display:flex;flex-direction:column;gap:10px">${rows}</div>`;
-}
 
-function renderTimeline(){
-  const events=[];
-  const push=(date,mod,color,ic,text,extra)=>{ if(!date) return; events.push({date,mod,color,ic,text,extra:extra||""}); };
-  // 待办
-  (data.todo||[]).forEach(x=>{ const d=x.lastDone||x.date; if(d) push(d,"todo","var(--module-1)","✓",esc(x.title||""),x.done?"":"未完成"); });
-  // 习惯打卡（逐日）
-  (data.checkin||[]).forEach(h=>{ Object.keys(h.log||{}).forEach(d=>{ if(h.log[d]) push(d,"checkin","var(--module-3)","🔥","打卡 · "+esc(h.title||"")); }); });
-  // 阅读进度
-  (data.read||[]).forEach(x=>{ if(x.date) push(x.date,"read","var(--module-5)","📖",esc(x.title||"")+" "+(x.progress!=null?Math.round(x.progress)+"%":"")); });
-  // 记账
-  (data.money||[]).forEach(x=>{ if(x.date) push(x.date,"money",x.type==="income"?"var(--module-1)":"var(--danger)","¥",(x.type==="income"?"+":"-")+"¥"+(x.amount||0)+" "+esc(x.title||x.cat||"")); });
-  // 笔记
-  (data.note||[]).forEach(x=>{ if(x.date) push(x.date,"note","var(--module-4)","📝",esc((x.title||x.content||"").slice(0,30))); });
-  // 番茄
-  (data.__pomo?.history||[]).forEach(h=>{ if(h.date) push(h.date,"focus","var(--module-6)","🍅",h.min+" 分钟专注"); });
-  // 心情
-  (data.__mood||{}).forEach((v,k)=>{ if(v&&v.score) push(k,"mood","var(--module-4)","😊","心情 "+v.score+"/5"+(v.tags&&v.tags.length?" · "+esc(v.tags.join(" ")):"")); });
-  // 健康
-  (data.__health||{}).forEach((v,k)=>{ if(v&&(v.water||v.steps)) push(k,"health","var(--module-2)","💧",((v.water? "💧"+v.water+"杯 ":"")+(v.steps?esc(String(v.steps))+"步":""))); });
-  events.sort((a,b)=>b.date.localeCompare(a.date));
-  // 按日期分组，取最近 14 天
-  const byDate={}; const daysList=[];
-  events.forEach(e=>{ const d=e.date.slice(0,10); if(!byDate[d]){ byDate[d]=[]; daysList.push(d); } byDate[d].push(e); });
-  const shown=daysList.slice(0,14);
-  const groups=shown.map(d=>{
-    const wd="日一二三四五六"[new Date(d).getDay()];
-    const isToday=d===today();
-    const rows=byDate[d].map(e=>`<div style="display:flex;gap:8px;padding:5px 0;border-bottom:1px solid var(--surface-nested);font-size:12.5px"><span style="width:18px;text-align:center;flex-shrink:0">${e.ic}</span><span style="flex:1;color:var(--text-secondary)">${e.text}${e.extra?`<span style="font-size:10.5px;color:var(--text-tertiary);margin-left:6px">${e.extra}</span>`:""}</span><span style="font-size:10.5px;color:var(--text-tertiary);flex-shrink:0">${e.mod}</span></div>`).join("");
-    return `<div style="display:flex;gap:12px;padding:10px 0">
-      <div style="width:44px;flex-shrink:0;text-align:right"><div style="font-weight:${isToday?'800':'500'};font-size:13px;color:${isToday?'var(--accent)':'var(--text)'}">${parseInt(d.slice(8,10))}</div><div style="font-size:10.5px;color:var(--text-tertiary)">${isToday?'今天':'周'+wd}</div></div>
-      <div style="width:2px;flex-shrink:0;background:${isToday?'var(--accent)':'var(--surface-nested)'};border-radius:1px"></div>
-      <div style="flex:1;min-width:0">${rows||'<div style="color:var(--text-tertiary);font-size:11.5px;padding:4px 0">无记录</div>'}</div>
-    </div>`;
-  }).join("");
-  $("#screen").innerHTML=`<div class="header"><div><h2>时间线</h2><p>按日期汇总所有模块事件 · 滚动查看近 14 天</p></div><div class="spacer"></div><span class="date-chip">${icon("calendar",14)} ${dateStr()}</span></div>
-    <div class="side-card" style="margin-top:16px">${events.length?groups:'<div style="color:var(--text-tertiary);font-size:13px;padding:20px 0;text-align:center">暂无历史事件，先去各模块记录吧</div>'}</div>`;
-}
 function renderTimeline(){
   const events=[];
   const push=(date,mod,color,ic,text,extra)=>{ if(!date) return; events.push({date,mod,color,ic,text,extra:extra||""}); };
@@ -3599,203 +3480,10 @@ function initRecurringTasks(){
 }
 
 /* ---------- 心情追踪视图 ---------- */
-function renderMood(){
-  const mood=data.__mood=data.__mood||{};
-  const t=today();
-  const todayEntry=mood[t]||{score:0,tag:""};
-  const moodTags=["疲惫","低落","平静","愉悦","兴奋"];
-  const moodEmojis=["😮‍💨","😔","😌","😊","🤩"];
-  const moodColors=["#9ca3af","#c084fc","#60a5fa","#34d399","#f59e0b"];
-  // 近 7 天趋势
-  const days=[]; for(let i=6;i>=0;i--) days.push(daysAgo(i));
-  const weekData=days.map(d=>({d, e:mood[d]||null}));
-  const hasWeek=weekData.some(w=>w.e&&w.e.score>0);
-  const bars=hasWeek?weekData.map((w,i)=>{
-    const s=w.e&&w.e.score?w.e.score:0;
-    const h=s*18;
-    const col=s?moodColors[s-1]:"var(--surface-nested)";
-    return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px">
-      <div style="width:28px;height:90px;background:var(--surface-nested);border-radius:6px;display:flex;align-items:flex-end;justify-content:center;overflow:hidden">
-        <div style="width:100%;height:${h}px;background:${col};border-radius:4px;transition:height .3s"></div>
-      </div>
-      <span style="font-size:10.5px;color:var(--text-tertiary)">${["日","一","二","三","四","五","六"][new Date(w.d+"T00:00:00").getDay()]}</span>
-      ${w.e&&w.e.tag?`<span style="font-size:13px">${moodEmojis[["疲惫","低落","平静","愉悦","兴奋"].indexOf(w.e.tag)]||"😊"}</span>`:`<span style="font-size:13px;opacity:.25">•</span>`}
-    </div>`; }).join(""):"";
-  const avgWeek=hasWeek?Math.round(weekData.reduce((a,w)=>a+(w.e?.score||0),0)/weekData.filter(w=>w.e?.score).length||0):0;
-
-  $("#screen").innerHTML=`<div class="header"><div><h2>心情追踪</h2><p>每日自评 · 情绪记录 · 周趋势</p></div><div class="spacer"></div><span class="date-chip">${icon("calendar",14)} ${dateStr()}</span></div>
-
-  <div class="mod-layout"><div class="mod-main">
-    <div class="side-card" style="margin-top:8px">
-      <div class="sh">${icon("smile",15)} 今日心情</div>
-      <div style="display:flex;gap:12px;margin-top:14px;flex-wrap:wrap;align-items:center">
-        <div style="display:flex;gap:8px">
-          ${[1,2,3,4,5].map(s=>`<button class="mood-score js-mood-score" data-s="${s}" style="width:44px;height:44px;font-size:18px;font-weight:800;border:2px solid ${s<=todayEntry.score?"var(--accent)":"var(--border)"};background:${s<=todayEntry.score?"var(--accent-muted)":"var(--surface-card)"};color:${s<=todayEntry.score?"var(--accent)":"var(--text-tertiary)"};border-radius:12px;cursor:pointer;transition:all .2s">${s}</button>`).join("")}
-        </div>
-        <div style="display:flex;gap:6px;flex-wrap:wrap">
-          ${moodTags.map((tag,i)=>`<button class="js-mood-tag" data-tag="${tag}" style="padding:4px 12px;font-size:12.5px;font-weight:700;border:1.5px solid ${todayEntry.tag===tag?moodColors[i]:"var(--border)"};background:${todayEntry.tag===tag?moodColors[i]+"22":"var(--surface-card)"};color:${todayEntry.tag===tag?moodColors[i]:"var(--text-secondary)"};border-radius:20px;cursor:pointer;transition:all .2s">${moodEmojis[i]} ${tag}</button>`).join("")}
-        </div>
-      </div>
-    </div>
-
-    <div class="side-card" style="margin-top:14px">
-      <div class="sh">${icon("chart",15)} 近 7 天情绪趋势</div>
-      <div style="display:flex;gap:10px;justify-content:space-around;padding:14px 0 6px">${bars||`<div style="color:var(--text-tertiary);font-size:12.5px;width:100%;text-align:center">暂无记录 · 每天来打一次分吧</div>`}</div>
-      ${hasWeek?`<div style="font-size:11.5px;color:var(--text-tertiary);text-align:center;padding-top:4px">本周平均 <b style="color:#e0954f;font-size:15px">${avgWeek}</b> / 5</div>`:""}
-    </div>
-
-    <div class="side-card" style="margin-top:14px">
-      <div class="sh">${icon("list",15)} 历史记录</div>
-      ${(()=>{ const entries=Object.entries(mood).filter(([,v])=>v.score>0).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,14);
-        return entries.length?entries.map(([date,v])=>`<div class="stat-row"><span class="k">${date}<span style="margin-left:8px;font-size:13px">${moodEmojis[moodTags.indexOf(v.tag)]||"😊"}</span></span><span class="val" style="color:${moodColors[v.score-1]||"var(--text)"}">${v.score} 分${v.tag?" · "+v.tag:""}</span></div>`).join("")
-        :`<div style="color:var(--text-tertiary);font-size:12.5px;padding:6px 0">暂无记录</div>`; })()}
-    </div>
-  </div><aside class="mod-side">
-    <div class="side-card"><div class="sh">${icon("smile",15)} 使用指南</div>
-      <div style="font-size:12px;color:var(--text-secondary);line-height:1.8">
-        <div style="margin-bottom:10px">1. 每天选一个分数（1-5）</div>
-        <div style="margin-bottom:10px">2. 选一个情绪标签（可选）</div>
-        <div>3. 周趋势图自动更新</div>
-      </div>
-      ${hasWeek?`<div style="margin-top:14px;padding-top:12px;border-top:1px solid var(--border)">
-        <div class="stat-row"><span class="k">本周有记录天数</span><span class="val">${weekData.filter(w=>w.e?.score).length} / 7</span></div>
-      </div>`:""}
-    </div>
-  </aside></div>`;
-
-  // wire
-  $("#screen").querySelectorAll(".js-mood-score").forEach(b=>b.onclick=()=>{
-    const s=+b.dataset.s;
-    data.__mood[t]={...(data.__mood[t]||{}),score:s};
-    store.save(); renderMood();
-  });
-  $("#screen").querySelectorAll(".js-mood-tag").forEach(b=>b.onclick=()=>{
-    const tag=b.dataset.tag;
-    const cur=data.__mood[t]||{score:0};
-    if(cur.tag===tag){ delete cur.tag; } else { cur.tag=tag; }
-    data.__mood[t]=cur;
-    store.save(); renderMood();
-  });
-}
 
 /* ---------- 健康追踪视图（饮水 / 步数 / 睡眠） ---------- */
-function renderHealth(){
-  const h=data.__health=data.__health||{};
-  const t=today();
-  const todayH=h[t]||{water:0,steps:0,sleep:0};
-  const goals=h.goals=h.goals||{water:8,steps:8000,sleep:8};
-  // 近 7 天
-  const days=[]; for(let i=6;i>=0;i--) days.push(daysAgo(i));
-  const wk=days.map(d=>({d,e:h[d]||{}}));
-  const barRow=(label,val,goal,unit,col)=>{
-    const pc=Math.min(100,Math.round(val/goal*100));
-    return `<div style="margin-bottom:14px">
-      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px">
-        <span style="font-weight:700;color:var(--text-secondary)">${label}</span>
-        <span style="color:${col};font-weight:800">${val} / ${goal}${unit}</span>
-      </div>
-      <div style="height:8px;background:var(--surface-nested);border-radius:4px;overflow:hidden">
-        <div style="height:100%;width:${pc}%;background:${col};border-radius:4px;transition:width .4s"></div>
-      </div>
-    </div>`;};
-  const weekChart=(get)=>{
-    const max=Math.max(...days.map(d=>get(h[d])||0),1);
-    return days.map(d=>{
-      const v=get(h[d])||0;
-      const hgt=Math.round(v/max*80);
-      return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px">
-        <div style="width:22px;height:80px;background:var(--surface-nested);border-radius:4px;display:flex;align-items:flex-end;overflow:hidden">
-          <div style="width:100%;height:${hgt}px;background:${get(h[d])?"#3a9d8f":"transparent"};border-radius:3px"></div>
-        </div>
-        <span style="font-size:10px;color:var(--text-tertiary)">${["日","一","二","三","四","五","六"][new Date(d+"T00:00:00").getDay()]}</span>
-      </div>`;}).join("");
-  };
-
-  $("#screen").innerHTML=`<div class="header"><div><h2>健康追踪</h2><p>饮水 · 步数 · 睡眠 · 每日目标</p></div><div class="spacer"></div><span class="date-chip">${icon("calendar",14)} ${dateStr()}</span></div>
-  <div class="mod-layout"><div class="mod-main">
-    <div class="side-card" style="margin-top:8px">
-      <div class="sh">${icon("heart",15)} 今日进度</div>
-      ${barRow("💧 饮水",todayH.water,goals.water,"杯","#5a8fb5")}
-      ${barRow("👟 步数",todayH.steps,goals.steps,"步","#3a9d8f")}
-      ${barRow("😴 睡眠",todayH.sleep,goals.sleep,"小时","#8a6db1")}
-      <div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">
-        <button class="btn" id="h-w+" style="font-size:12px;padding:5px 12px">+1 杯水</button>
-        <button class="btn" id="h-s+" style="font-size:12px;padding:5px 12px">+1000 步</button>
-        <button class="btn" id="h-l+" style="font-size:12px;padding:5px 12px">+1 小时睡眠</button>
-      </div>
-      <div style="font-size:11px;color:var(--text-tertiary);margin-top:8px">
-        目标：<input id="h-goal-w" type="number" value="${goals.water}" style="width:36px;font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;text-align:center"> 杯 ·
-        <input id="h-goal-s" type="number" value="${goals.steps}" style="width:60px;font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;text-align:center"> 步 ·
-        <input id="h-goal-l" type="number" value="${goals.sleep}" style="width:36px;font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;text-align:center"> 小时
-        <button class="btn" id="h-goal-save" style="font-size:11px;padding:3px 8px">保存目标</button>
-      </div>
-    </div>
-    <div class="side-card" style="margin-top:14px">
-      <div class="sh">${icon("chart",15)} 近 7 天 · 饮水</div>
-      <div style="display:flex;gap:8px;justify-content:space-around;padding:10px 0">${weekChart(e=>e.water)}</div>
-    </div>
-    <div class="side-card" style="margin-top:14px">
-      <div class="sh">${icon("chart",15)} 近 7 天 · 步数</div>
-      <div style="display:flex;gap:8px;justify-content:space-around;padding:10px 0">${weekChart(e=>e.steps)}</div>
-    </div>
-  </div><aside class="mod-side">
-    <div class="side-card"><div class="sh">${icon("heart",15)} 周统计</div>
-      <div class="stat-row"><span class="k">平均饮水</span><span class="val" style="color:#5a8fb5">${(wk.reduce((a,w)=>a+(w.e.water||0),0)/7).toFixed(1)} 杯/天</span></div>
-      <div class="stat-row"><span class="k">平均步数</span><span class="val" style="color:#3a9d8f">${Math.round(wk.reduce((a,w)=>a+(w.e.steps||0),0)/7)}</span></div>
-      <div class="stat-row"><span class="k">达标天数</span><span class="val">${wk.filter(w=>(w.e.water||0)>=goals.water&&(w.e.steps||0)>=goals.steps).length} / 7</span></div>
-    </div>
-  </aside></div>`;
-
-  const inc=(k,step)=>{ data.__health[t]=data.__health[t]||{}; data.__health[t][k]=(data.__health[t][k]||0)+step; store.save(); renderHealth(); };
-  $("#h-w+").onclick=()=>inc("water",1);
-  $("#h-s+").onclick=()=>inc("steps",1000);
-  $("#h-l+").onclick=()=>inc("sleep",1);
-  $("#h-goal-save").onclick=()=>{
-    const g={water:Math.max(1,+$("#h-goal-w").value||8),steps:Math.max(0,+$("#h-goal-s").value||8000),sleep:Math.max(0,+$("#h-goal-l").value||8)};
-    data.__health.goals=g; store.save(); renderHealth();
-  };
-}
 
 /* ---------- 周期任务自动生成待办 ---------- */
-function initRecurringTasks(){
-  const tasks=data.__recurringTasks=data.__recurringTasks||[];
-  const t=today();
-  let changed=false;
-  tasks.forEach(task=>{
-    if(!task.enabled) return;
-    const lastGen=task.lastGen||"";
-    let shouldGen=false;
-    if(task.period==="daily"){
-      shouldGen=lastGen<t;
-    } else if(task.period==="weekly"){
-      // 每周几执行
-      const dow=new Date(t+"T00:00:00").getDay();
-      if(task.weekday!=null && task.weekday===dow && lastGen<t) shouldGen=true;
-    } else if(task.period==="monthly"){
-      const day=new Date().getDate();
-      const ym=t.slice(0,7);
-      if(task.dayOfMonth==null || day>=task.dayOfMonth){
-        const lastYm=lastGen.slice(0,7);
-        if(lastYm<ym) shouldGen=true;
-      }
-    }
-    if(shouldGen){
-      data.todo=data.todo||[];
-      data.todo.unshift({
-        id:Date.now()+Math.floor(Math.random()*1000),
-        title:"【周期】"+(task.title||"定期任务"),
-        priority:task.priority||"P2",
-        done:false,
-        date:t,
-        note:"自动生成的周期任务 · "+({daily:"每天",weekly:"每周",monthly:"每月"}[task.period]||""),
-        fromRecurring:task.id
-      });
-      task.lastGen=t;
-      changed=true;
-    }
-  });
-  if(changed) store.save();
-}
 
 /* ---------- 个人信息视图 ---------- */
 function renderProfile(){
@@ -3958,7 +3646,6 @@ $("#btnCsv").onclick=()=>{
   a.download=`workbench-csv-${isoToday()}.csv`; document.body.appendChild(a); a.click(); a.remove();
   URL.revokeObjectURL(a.href); toast("已导出 CSV 文件");
 };
-function mk2(k){ return {todo:"待办",money:"记账",note:"笔记",read:"阅读",checkin:"习惯",progress:"目标",focus:"专注",remind:"提醒"}[k]||k; }
 $("#btnCsvIn").onclick=()=>$("#csvImportFile").click();
 $("#csvImportFile").onchange=e=>{
   const f=e.target.files&&e.target.files[0]; if(!f) return;
@@ -4296,78 +3983,6 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
       store.save();
     }
     // --- 全局快速添加面板 ---
-    function toggleQuickAdd(){
-      let panel = document.getElementById('wb-qa');
-      if (panel) { panel.remove(); return; }
-      panel = document.createElement('div');
-      panel.id = 'wb-qa';
-      panel.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(15,23,42,.45);z-index:50;display:flex;justify-content:center;padding-top:10vh;backdrop-filter:blur(2px)';
-      const routeHints = ['¥金额/收/支 → 记账', '#标签 或 #text → 笔记', '读完/学到 → 阅读', '默认 → 待办'];
-      panel.innerHTML =
-        '<div style="background:var(--surface-card);border-radius:14px;box-shadow:0 24px 64px rgba(0,0,0,.25);width:min(560px,92vw);padding:20px 22px">' +
-        '<div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;font-size:12px;color:var(--text-tertiary)"><span style="font-size:15px">⚡</span> 快速添加 · 按 Enter 提交 · Esc 关闭</div>' +
-        '<input id="wb-qa-in" type="text" placeholder="例如：还房租 3200 / #灵感 新点子 / 读完《xxx》第3章" style="width:100%;padding:11px 14px;font-size:15px;border:1px solid var(--border-input);border-radius:9px;background:var(--surface-nested);color:var(--text-primary);outline:none;box-sizing:border-box">' +
-        '<div style="display:flex;flex-wrap:wrap;gap:6px;margin-top:12px">' +
-        routeHints.map(h => '<span style="font-size:10.5px;padding:3px 8px;border-radius:999px;background:var(--surface-nested);color:var(--text-tertiary);border:1px solid var(--border)">' + h + '</span>').join('') +
-        '</div></div>';
-      document.body.appendChild(panel);
-      panel.addEventListener('click', e => { if (e.target === panel) panel.remove(); });
-      const inp = panel.querySelector('#wb-qa-in');
-      inp.focus();
-      const close = () => panel.remove();
-      panel.addEventListener('keydown', e => {
-        if (e.key === 'Escape') close();
-      });
-      inp.addEventListener('keydown', e => {
-        if (e.key !== 'Enter') return;
-        e.preventDefault();
-        const text = inp.value.trim();
-        if (!text) return close();
-        quickAdd(text);
-        close();
-        render();
-      });
-    }
-    function quickAdd(text){
-      const t = today();
-      const uid = () => Date.now() + Math.floor(Math.random()*1000);
-      // 记账：¥xx / 收入/支出 数��
-      const mMoney = text.match(/^(?:支出|收入|收|支)?\s*¥?\s*(\d+(?:\.\d+)?)\s*(.*)$/);
-      const isExpense = /支出|花了|消费|买了|消费|付了/.test(text);
-      const isIncome = /收入|工资|赚了|奖金/.test(text);
-      if (mMoney && (isExpense || isIncome || mMoney[1] !== '')) {
-        if (isIncome || isExpense || /^\s*(?:支出|收入|收|支)/.test(text)) {
-          data.money = data.money || [];
-          data.money.unshift({ id: uid(), type: isIncome ? 'income' : 'expense', amount: parseFloat(mMoney[1]), title: mMoney[2] || (isIncome?'收入':'支出'), date: t, cat: '日常', ts: Date.now() });
-          toast('已记入「记账」');
-          store.save();
-          return;
-        }
-      }
-      // 笔记：#开头 或 含 "笔记"/"记一下"
-      if (text.startsWith('#') || /笔记|记一下|想法|灵感/.test(text)) {
-        data.note = data.note || [];
-        const tags = text.match(/#([^\s#]+)/g) || [];
-        const title = text.replace(/^#/,'').replace(/#\S+/g,'').trim() || '随手记';
-        data.note.unshift({ id: uid(), title: title, content: text, date: t, tags: tags.map(x=>x.slice(1)), ts: Date.now() });
-        toast('已存入「笔记」');
-        store.save();
-        return;
-      }
-      // 阅读���读完/正在读/学到
-      if (/读完|正在读|学到|书/.test(text)) {
-        data.read = data.read || [];
-        data.read.unshift({ id: uid(), title: text, progress: /读完/.test(text) ? 100 : 10, goal: 100, ts: Date.now(), date: t });
-        toast('已加入「阅读」');
-        store.save();
-        return;
-      }
-      // 默认：待办
-      data.todo = data.todo || [];
-      data.todo.unshift({ id: uid(), title: text, done: false, date: t, ts: Date.now() });
-      toast('已加入「待办」');
-      store.save();
-    }
     // --- 键盘快捷键 ---
     function initKeys(){
       document.addEventListener('keydown', e => {
@@ -4774,35 +4389,6 @@ sync.startAuto(); if(sync.on) sync.pull(true).then(()=>{ if((sync.cfg().rev||0)=
    setTimeout(sync,1200);
  })();
  </script><script>
- // PWA 离线状态提示条
- (function(){
-   var bar=document.createElement('div');
-   bar.id='wb-offline-bar';
-   bar.style.cssText='position:fixed;top:0;left:0;right:0;z-index:9999;text-align:center;padding:6px 0;font-size:12px;font-weight:600;transform:translateY(-100%);opacity:0;transition:transform .3s,opacity .3s';
-   document.body.appendChild(bar);
-   function show(msg,color){
-     bar.textContent=msg;
-     bar.style.background=color;
-     bar.style.color='#fff';
-     bar.style.transform='translateY(0)';
-     bar.style.opacity='1';
-   }
-   function hide(){ bar.style.transform='translateY(-100%)'; bar.style.opacity='0'; }
-   function sync(){
-     if(navigator.onLine){
-       if(bar.style.transform!=='translateY(-100%)' && bar.style.opacity==='1'){
-         show('✅ 网络已恢复，数据将自动同步','#2c4a7c');
-         setTimeout(function(){ if(navigator.onLine) hide(); },3000);
-       }
-     } else {
-       show('📡 当前离线 · 工作台可继续使用，数据保存在本地，联网后自动同步','#555');
-     }
-   }
-   window.addEventListener('online',sync);
-   window.addEventListener('offline',sync);
-   window.addEventListener('wb-sw-ready',sync);
-   setTimeout(sync,1200);
- })();
  </script>
 <div class="ob" id="ob">
   <div class="ob-card">
