@@ -1112,7 +1112,7 @@
         <span class="sync-badge" id="syncBadge">未启用同步</span>
         <button class="sync-btn" id="btnSync" type="button">同步</button>
       </div>
-       <div class="foot-hint">数据默认存本机 · 自动备份 · 可开启多端同步 · v1.15.0</div>
+       <div class="foot-hint">数据默认存本机 · 自动备份 · 可开启多端同步 · v1.15.1</div>
       <div class="foot-actions">
         <button class="foot-btn" id="btnSystemCfg" type="button" style="width:100%">系统配置</button>
       </div>
@@ -1466,34 +1466,6 @@ const sync = {
       } else if(!silent){ toast("本地已是最新"); }
     } catch(e){ if(!silent) toast("拉取失败："+e.message); this.badge("同步失败"); console.warn("[sync] pull:", e); }
   },
-  async forcePush(){   // v1.9.6: 用本机整体覆盖云端（同步分歧收敛逃生舱）
-    if(!this.on){ toast("未开启同步"); return; }
-    if(this._busy) return; this._busy=true; this.badge("覆盖中…");
-    try{
-      try{ ensureV2(data); }catch(_e){}
-      const res=await fetch(this._url("/data"),{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({data})});
-      if(!res.ok) throw new Error("HTTP "+res.status);
-      const r=await res.json().catch(()=>({}));
-      if(r.rev!=null) this.set("rev",r.rev); if(r.updatedAt) this.set("updatedAt",r.updatedAt);
-      this.set("lastSync",Date.now()); this._saveBase(data); this.badge("已同步"); toast("已用本机数据覆盖云端");
-    }catch(e){ this.badge("同步失败"); toast("覆盖失败："+e.message); console.warn("[sync] forcePush:",e); }
-    finally{ this._busy=false; }
-  },
-  async forcePull(){   // v1.9.6: 用云端整体覆盖本机（同步分歧收敛逃生舱）
-    if(!this.on){ toast("未开启同步"); return; }
-    if(this._busy) return; this._busy=true; this.badge("拉取中…");
-    try{
-      const res=await fetch(this._url("/data"),{method:"GET"});
-      if(!res.ok) throw new Error("HTTP "+res.status);
-      const r=await res.json().catch(()=>({}));
-      if(!r||r.data==null) throw new Error("云端暂无数据");
-      try{ bak.save(JSON.stringify(data)); }catch(_e){}   // 覆盖前自动快照，可从备份恢复撤销
-      data=r.data; ensureV2(data); autoTrend(); store.saveLocal();
-      if(r.rev!=null) this.set("rev",r.rev); if(r.updatedAt) this.set("updatedAt",r.updatedAt);
-      this.set("lastSync",Date.now()); this._saveBase(data); render(); this.badge("已同步"); toast("已用云端数据覆盖本机");
-    }catch(e){ this.badge("同步失败"); toast("覆盖失败："+e.message); console.warn("[sync] forcePull:",e); }
-    finally{ this._busy=false; }
-  },
   _baseKey(){ return SYNC_KEY+"::base"; },
   _saveBase(d){ try{ storage.setItem(this._baseKey(), JSON.stringify(d)); }catch(e){} },
   _base(){ try{ const s=storage.getItem(this._baseKey()); return s?JSON.parse(s):null; }catch(e){ return null; } },
@@ -1541,7 +1513,7 @@ function openSyncPanel(){
   overlay.innerHTML = `
     <div class="modal">
       <h3>多端同步设置</h3>
-      <div class="sub">连接一个轻量后端，手机 / 电脑 / 平板的数据自动保持一致。未配置时数据仍只存本机。当前版本 <b>v1.15.0</b>。</div>
+      <div class="sub">连接一个轻量后端，手机 / 电脑 / 平板的数据自动保持一致。未配置时数据仍只存本机。当前版本 <b>v1.15.1</b>。</div>
       <div class="field"><label>后端地址</label><input id="sy-url" class="sy-input" placeholder="http://192.168.1.20:8787 或 https://your.host" value="${attr(c.url||"")}"/></div>
       <div class="field"><label>同步令牌 Token</label><input id="sy-token" class="sy-input" placeholder="自定义一段足够长的随机密钥" value="${attr(c.token||"")}"/></div>
       <div class="sy-status" id="sy-status">${ sync.on ? ("已连接 · 上次同步：" + sync.fmtLast()) : "尚未启用同步" }</div>
@@ -1752,34 +1724,9 @@ function habitTileHTML(){
     const rate=Math.round(cnt/7*100);
     return `<tr><td class="hn"><span class="hdot" style="background:${palette[ri%palette.length]}"></span>${esc(x.title)}</td>${cells}<td class="hrate" style="color:${palette[ri%palette.length]}">${rate}%</td></tr>`;
   }).join("") : `<tr><td colspan="9" style="text-align:center;color:var(--text-tertiary);font-size:12.5px;padding:18px 0">还没有习惯，去「习惯打卡」添加吧</td></tr>`;
-
-  // GitHub-style 84天热力图
-  const heat=heatMapHTML(items);
   return `<div class="tile b7"><div class="tile-h"><span class="tic">${icon("leaf",16)}</span><div class="tt"><span class="en">HABIT TRACKER</span><span class="zh">本周习惯追踪表</span></div><span class="r js-open" data-open="checkin">本周 · 周${dnames[((new Date().getDay())+6)%7]}</span></div>
     <table class="habit-tb"><thead><tr><th class="hh">习惯</th>${ths}<th class="hr">完成率</th></tr></thead><tbody>${rows}</tbody></table>
-    ${heat}</div>`;
-}
-
-/* 84天习惯热力图 */
-function heatMapHTML(items){
-  if(!items.length) return "";
-  const t=today();
-  const days=[];
-  for(let i=83;i>=0;i--){ const d=daysAgo(i); days.push(d); }
-  // 每天总打卡数
-  const daily=days.map(d=>items.filter(x=>x.log&&x.log[d]).length);
-  const max=daily.length?Math.max(...daily):1;
-  const cells=daily.map((cnt,i)=>{
-    const lvl=max>1?Math.round(cnt/max*4):0;
-    return `<span class="hd l${cnt>0?lvl:0}" title="${days[i]} · 打卡${cnt}项"></span>`;
-  }).join("");
-  // 连续天数
-  let streak=0;
-  for(let i=daily.length-1;i>=0;i--){ if(daily[i]>0)streak++; else break; }
-  const best=(()=>{ let m=0,c=0; for(let i=0;i<daily.length;i++){ if(daily[i]>0){c++;m=Math.max(m,c);}else c=0;} return m; })();
-  return `<div class="heat-wrap"><div class="heat-label">近 84 天打卡热力</div>
-    <div class="heat-grid">${cells}</div>
-    <div class="heat-streak"><span>连续 <b>${streak}</b> 天</span><span>最长 <b>${best}</b> 天</span></div></div>`;
+  </div>`;
 }
 
 /* 待办清单（仪表盘式，就地勾选） */
@@ -1853,20 +1800,6 @@ function booksTileHTML(){
         <div class="bbar"><i style="width:${pct}%;background:${col}"></i></div></div><span class="bpct" style="color:${col}">${pct}%</span></div>`; }).join("")
     : `<div class="focus-empty">还没有目标，去「长期目标」添加吧</div>`;
   return `<div class="tile b8"><div class="tile-h"><span class="tic">${icon("target",16)}</span><div class="tt"><span class="en">LONG-TERM GOALS</span><span class="zh">目标进度</span></div><span class="r js-open" data-open="read">${all.length} 项</span></div>
-    <div class="book-list">${rows}</div></div>`;
-}
-
-/* 本周目标：sport 模块在 v1.13 移除，此函数为历史遗留死代码（无调用者）。
-   v1.15.0: 修正 data.sport 死引用 → data.read（阅读目标），避免未来误用导致 undefined */
-function goalsTileHTML(){
-  const all=data.read||[]; const colors=["var(--module-3)","var(--module-1)","var(--module-2)","var(--module-4)","var(--module-5)"];
-  const rows=all.length? all.map((x,i)=>{ const pct=Math.min(100,Math.round((x.current/x.target)*100||0)); const col=colors[i%colors.length];
-    return `<div class="book-row"><span class="spine" style="background:${col}">${icon("activity",16)}</span>
-      <div class="bmid"><div class="btt">${pct>=100?`<span style="color:var(--module-1);display:inline-flex;vertical-align:-2px;margin-right:3px">${icon("check",13,2.6)}</span>`:''}${esc(x.title)}</div>
-        <div class="bsub">${x.current}/${x.target} ${x.unit||'次'}</div>
-        <div class="bbar"><i style="width:${pct}%;background:${col}"></i></div></div><span class="bpct" style="color:${col}">${pct}%</span></div>`; }).join("")
-    : `<div class="focus-empty">还没有阅读目标，去「阅读」添加吧</div>`;
-  return `<div class="tile b4"><div class="tile-h"><span class="tic">${icon("activity",16)}</span><div class="tt"><span class="en">WEEKLY GOALS</span><span class="zh">本周目标</span></div><span class="r js-open" data-open="read">${all.length} 项</span></div>
     <div class="book-list">${rows}</div></div>`;
 }
 
@@ -3743,9 +3676,8 @@ function importData(file){
   }catch(e){ toast("解析失败："+e.message); } };
   r.readAsText(file);
 }
-if($("#btnSync")) if($("#btnSync")) $("#btnSync").onclick=()=>sync.openPanel();
-// v1.15.0: 顶层 DOM 绑定统一加 null 防护——按钮缺失时不再中断整个主脚本（此前 #btnBak 孤儿绑定是空白页根因之一）
-// v1.15.0: 顶层 DOM 绑定统一加 null 防护——按钮缺失时不再中断整个主脚本（此前 #btnBak 孤儿绑定是空白页根因之一）
+if($("#btnSync")) $("#btnSync").onclick=()=>sync.openPanel();
+// v1.15.1: 顶层 DOM 绑定统一加 null 防护——按钮缺失时不再中断整个主脚本（此前 #btnBak 孤儿绑定是空白页根因之一）
 function mk2(k){ return {todo:"待办",money:"记账",note:"笔记",read:"阅读",checkin:"习惯",progress:"目标",focus:"专注",remind:"提醒"}[k]||k; }
 function csvExport(){
   const lines=[["模块","类型","标题","内容/备注","日期","金额","完成","进度","分类","标签"]];
@@ -3813,6 +3745,11 @@ function renderSystemCfg(){
       <div class="sub" style="margin:6px 0 12px">连接轻量后端，手机 / 电脑 / 平板数据自动保持一致。未配置时数据只存本机。</div>
       <button class="btn" id="sys-sync">配置同步后端</button>
       <div class="sub" style="margin-top:10px">状态：${sync.on?("已连接 · 上次同步 "+sync.fmtLast()):"未启用"}</div>
+    </div>
+    <div class="side-card" style="margin:0">
+      <div class="sh">${icon("cog",15)} 浏览器缓存自愈</div>
+      <div class="sub" style="margin:6px 0 12px">页面加载后仍显示旧版 / 空白时，一键清除浏览器 Service Worker 冻结的旧页面（不影响本地数据）。</div>
+      <button class="btn ghost" id="sys-clearsw">清除旧 Service Worker 缓存</button>
     </div>
     <div class="side-card" style="margin:0">
       <div class="sh">${icon("cog",15)} 浏览器缓存自愈</div>
@@ -3910,7 +3847,7 @@ function openBakPanel(){
     if(confirm("用 "+d+" 的快照覆盖当前全部数据？恢复前会把当前数据先自动快照一份，可再次恢复撤销。")){ bak.save(JSON.stringify(data)); bak.restore(d); close(); }
   });
 }
-// v1.15.0: #btnBak 按钮在 v1.13 收编进「系统配置」后已移除，原 $("#btnBak").onclick 属孤儿绑定（null.onclick 会中断整个主脚本），改为防御式绑定
+// v1.15.1: #btnBak 按钮在 v1.13 收编进「系统配置」后已移除，原 $("#btnBak").onclick 属孤儿绑定（null.onclick 会中断整个主脚本），改为防御式绑定
 var _btnBakEl = document.getElementById("btnBak");
 if (_btnBakEl) _btnBakEl.onclick = openBakPanel;
 
@@ -4416,7 +4353,7 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
   })();
 
 // 启动序列包一层兜底：任何一处意外异常都不再让 #screen 静默空白，而是显示可读的故障卡片 + 一键重置
-// v1.15.0: 启动兜底卡片新增「清除旧浏览器缓存」按钮（旧 Service Worker Cache Storage 冻结旧页面的自愈入口）
+// v1.15.1: 启动兜底卡片新增「清除旧浏览器缓存」按钮（旧 Service Worker Cache Storage 冻结旧页面的自愈入口）
 try{
   buildNav();
   render();

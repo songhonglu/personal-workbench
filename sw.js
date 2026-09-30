@@ -13,7 +13,7 @@
        也会触发新 SW 激活 → controllerchange → location.reload() 循环，
        页面侧已有 _wbReloaded 标志做去重）
 */
-const CACHE = 'wb-v2.1.0';
+const CACHE = 'wb-v2.2.0';
 const CACHE_PREFIX = 'wb-';
 const CORE = ['./', 'index.html', 'manifest.json', 'icon-192.png', 'icon-512.png'];
 
