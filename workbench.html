@@ -2511,17 +2511,82 @@ function recHTML(m,x){
       <span class="badge" style="background:var(--surface-nested);color:var(--text-secondary)">${esc(x.category||'其他')}</span>${x.recur?'<span class="badge" style="background:var(--surface-nested);color:var(--text-secondary)">🔄 '+(x.recur==='week'?'每周':(x.recur==='month'?'每月':'每年'))+'</span>':''}
       <span class="rdate">${x.date||''}</span>${customBlock}</div>
       <div class="amt ${inc?'inc':'exp'}">${inc?'+':'-'}¥${x.amount}</div></div></div>`; }
-  // note
-  return `<div class="rec ${layoutCls}">${acts}<div class="top" style="padding-right:60px">${thumb}<div class="body" data-edit="${x.id}">
-    <span class="rname">${esc(x.title||'无标题')}</span>
-    ${x.mood?`<span class="badge" style="background:var(--accent-muted);color:var(--accent)">${esc(x.mood)}</span>`:''}
-    ${(x.tags&&x.tags.length)?`<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">${x.tags.map(tg=>`<span style="font-size:11px;padding:1px 7px;background:var(--surface-nested);border-radius:9px;color:var(--text-secondary)">${esc(tg)}</span>`).join("")}</div>`:''}
-    ${x.content?`<span class="rdate" style="margin-left:0;color:var(--text-tertiary)">${esc(x.content).slice(0,40)}</span>`:''}
-    <span class="rdate">${x.date||''}</span>${customBlock}</div></div></div>`;
+   // note
+   const _hasMd=x.content&&/(^#{1,4}\s|^\s*[-*]\s|^\s*\d+[.)]\s|```|\*\*.+?\*\*)/m.test(x.content);
+   return `<div class="rec ${layoutCls}">${acts}<div class="top" style="padding-right:60px">${thumb}<div class="body" data-edit="${x.id}">
+     <span class="rname">${esc(x.title||'无标题')}${_hasMd?' <span style="font-size:9.5px;font-weight:800;color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:0 4px;vertical-align:1px;letter-spacing:.04em">MD</span>':''}</span>
+     ${x.mood?`<span class="badge" style="background:var(--accent-muted);color:var(--accent)">${esc(x.mood)}</span>`:''}
+     ${(x.tags&&x.tags.length)?`<div style="display:flex;gap:4px;flex-wrap:wrap;margin-top:4px">${x.tags.map(tg=>`<span style="font-size:11px;padding:1px 7px;background:var(--surface-nested);border-radius:9px;color:var(--text-secondary)">${esc(tg)}</span>`).join("")}</div>`:''}
+     ${x.content?(_hasMd?`<span style="margin-left:0;color:var(--text-tertiary);font-family:ui-monospace,Menlo,Consolas,monospace;font-size:11px;background:var(--surface-nested);padding:2px 6px;border-radius:4px;display:inline-block;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">${esc(x.content.slice(0,40))}</span>`:`<span class="rdate" style="margin-left:0;color:var(--text-tertiary)">${esc(x.content).slice(0,40)}</span>`):''}
+     <span class="rdate">${x.date||''}</span>${customBlock}</div></div></div>`;
 }
 
 function streak(log){ if(!log) return 0; let n=0; const d=new Date();
   for(;;){ const k=fmtLocal(d); if(log[k]){ n++; d.setDate(d.getDate()-1);} else break; } return n; }
+
+/* v1.13.0: 轻量 Markdown 渲染（笔记详情）— 支持标题/列表/加粗斜体/行内代码/代码块/引用/链接 */
+function mdRender(src){
+  if(!src) return "";
+  let s=String(src).replace(/\r\n/g,"\n");
+  // 代码块（```）先抽出
+  const codeBlocks=[];
+  s=s.replace(/```(\w*)\n([\s\S]*?)```/g,(m,lang,code)=>{
+    const i=codeBlocks.length;
+    codeBlocks.push({lang,code});
+    return " MD CODE "+i+" ";
+  });
+  const inline=t=>{
+    t=t.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+    t=t.replace(/`([^`]+)`/g,(m,c)=>`<code style="background:var(--surface-nested);padding:1px 5px;border-radius:4px;font-size:.88em;font-family:ui-monospace,Menlo,Consolas,monospace;color:var(--accent)">${c}</code>`);
+    t=t.replace(/\*\*([^*]+)\*\*/g,"<b>$1</b>");
+    t=t.replace(/(^|[^*])\*([^*]+)\*/g,"$1<i>$2</i>");
+    t=t.replace(/\[([^\]]+)\]\(([^)]+)\)/g,(m,txt,href)=>{
+      const safe=/^https?:/.test(href)?href:"#";
+      return `<a href="${safe}" target="_blank" rel="noopener" style="color:var(--accent);text-decoration:underline">${txt}</a>`;
+    });
+    return t;
+  };
+  const lines=s.split("\n");
+  let out=[], inList=null;
+  const closeList=()=>{ if(inList){ out.push("</"+inList+">"); inList=null; } };
+  lines.forEach(raw=>{
+    const line=raw;
+    const codeM=line.match(/^ MD CODE (\d+) $/);
+    if(codeM){ closeList(); const cb=codeBlocks[+codeM[1]]; out.push(`<pre style="background:#1e2430;color:#e6edf3;padding:10px 12px;border-radius:8px;overflow-x:auto;font-size:12px;line-height:1.6"><code${cb.lang?` data-lang="${cb.lang}"`:""}>${cb.code.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;")}</code></pre>`); return; }
+    const h=line.match(/^(#{1,4})\s+(.*)$/);
+    if(h){ closeList(); const lvl=h[1].length; out.push(`<div style="font-weight:800;font-size:${16-lvl+3}px;margin:8px 0 4px">${inline(h[2])}</div>`); return; }
+    if(/^\s*>/.test(line)){ closeList(); out.push(`<div style="border-left:3px solid var(--accent);padding:2px 10px;color:var(--text-secondary);margin:4px 0;font-size:12.5px">${inline(line.replace(/^\s*>\s?/,""))}</div>`); return; }
+    const ul=line.match(/^\s*[-*]\s+(.*)$/);
+    if(ul){ if(inList!=="ul"){ closeList(); out.push('<ul style="margin:4px 0;padding-left:18px;line-height:1.7">'); inList="ul"; } out.push(`<li>${inline(ul[1])}</li>`); return; }
+    const ol=line.match(/^\s*\d+[.)]\s+(.*)$/);
+    if(ol){ if(inList!=="ol"){ closeList(); out.push('<ol style="margin:4px 0;padding-left:18px;line-height:1.7">'); inList="ol"; } out.push(`<li>${inline(ol[1])}</li>`); return; }
+    closeList();
+    if(line.trim()==="") return;
+    out.push(`<div style="margin:3px 0;line-height:1.7;font-size:13.5px">${inline(line)}</div>`);
+  });
+  closeList();
+  return out.join("");
+}
+
+/* v1.13.0: 笔记详情浮层 — Markdown 渲染 + 复制 + 切换编辑 */
+function openNoteDetail(key,x,editFn){
+  const overlay=document.createElement("div"); overlay.className="overlay";
+  overlay.innerHTML=`<div class="modal" style="max-width:560px"><h3>${esc(x.title||"无标题")}</h3>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin:6px 0 12px">
+      ${x.mood?`<span style="font-size:11px;padding:2px 8px;background:var(--accent-muted);border-radius:9px;color:var(--accent)">${esc(x.mood)}</span>`:''}
+      ${(x.tags||[]).map(tg=>`<span style="font-size:11px;padding:2px 8px;background:var(--surface-nested);border-radius:9px;color:var(--text-secondary)">${esc(tg)}</span>`).join("")}
+      <span style="font-size:11px;color:var(--text-tertiary);margin-left:auto">${x.date||""}</span>
+    </div>
+    <div style="font-size:11px;font-weight:700;color:var(--text-tertiary);margin-bottom:6px">📖 Markdown 预览</div>
+    <div id="md-body" style="max-height:42vh;overflow-y:auto;padding:4px 0">${mdRender(x.content)||'<div style="color:var(--text-tertiary);font-size:13px">（空笔记）</div>'}</div>
+    <div class="modal-actions"><button class="btn ghost" id="md-copy">复制全文</button>${editFn?'<button class="btn ghost" id="md-edit">✏️ 编辑</button>':''}<div class="spacer"></div><button class="btn" id="md-close">关闭</button></div></div>`;
+  document.body.appendChild(overlay);
+  const close=()=>overlay.remove();
+  overlay.onclick=e=>{ if(e.target===overlay) close(); };
+  overlay.querySelector("#md-close").onclick=close;
+  if(editFn){ const eb=overlay.querySelector("#md-edit"); if(eb) eb.onclick=()=>{ close(); editFn(); }; }
+  overlay.querySelector("#md-copy").onclick=()=>{ navigator.clipboard&&navigator.clipboard.writeText((x.content||"")).then(()=>toast("已复制")).catch(()=>toast("复制失败")); };
+}
 
 function wireModule(key){ const m=modOf(key);
   $("#screen").querySelectorAll(".js-chk").forEach(el=>el.onclick=e=>{ e.stopPropagation();
@@ -2532,7 +2597,14 @@ function wireModule(key){ const m=modOf(key);
       // v1.13.0: 关联习惯打卡自动推进长期目标
       if(on){ (data.read||[]).forEach(p=>{ if(p.habitId==x.id) p.current=Math.min(+p.target||0,(+p.current||0)+1); }); } }
     el.classList.toggle("on",on); persistOnly(); });   // v1.10.0: 局部更新
-  $("#screen").querySelectorAll("[data-edit]").forEach(el=>el.onclick=()=>openEditor(key,(data[key]).find(i=>i.id==el.dataset.edit)));
+  $("#screen").querySelectorAll("[data-edit]").forEach(el=>el.onclick=e=>{
+    const item=(data[key]).find(i=>i.id==el.dataset.edit); if(!item) return;
+    // v1.13.0: 笔记内容含 Markdown 语法时优先展示渲染预览，浮层内可切编辑
+    if(m.type==="note" && item.content && /(^#{1,4}\s|^\s*[-*]\s|^\s*\d+[.)]\s|```|\*\*.+?\*\*|`[^`]+`|\[.+?\]\(.+?\))/.test(item.content)){
+      e.stopPropagation();
+      openNoteDetail(key,item,()=>openEditor(key,item));
+    } else openEditor(key,item);
+  });
   $("#screen").querySelectorAll(".js-del").forEach(el=>el.onclick=e=>{ e.stopPropagation(); confirmDelete(key, el.dataset.id); });
   $("#screen").querySelectorAll(".js-pin").forEach(el=>el.onclick=e=>{ e.stopPropagation(); const x=(data[key]).find(i=>i.id==el.dataset.id); x.pinned=!x.pinned; persist(); });
   // v1.13.0: 月度预算保存
