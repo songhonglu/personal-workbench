@@ -1892,25 +1892,30 @@ function renderHome(){
     <div><div class="clk" id="clk">${pad2(now.getHours())}:${pad2(now.getMinutes())}:${pad2(now.getSeconds())}</div>
       <div class="cmeta"><span>${dateStr()}</span><span class="dot"></span><span>第 ${weekNum()} 周</span></div></div></div>`;
 
+  const showTiles=(data.__ui||{}).tiles||null;
+  const tileOn=(k,def)=>{ if(k==="今日节奏") return true; return showTiles===null?def:!!showTiles[k]; };
+  const sec=(title,en,html)=>tileOn(title,true)?`<div class="home-sec" data-sectitle="${esc(title).replace(/"/g,'&quot;')}">
+    ${grp(title,en)}
+    ${html}
+  </div>`:"";
+
   $("#screen").innerHTML = `
-    <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px">
+    <div style="margin-bottom:12px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
       ${grp("今日节奏","TODAY&nbsp;&nbsp;·&nbsp;&nbsp;RHYTHM")}
+      <span style="margin-left:auto"><button class="btn ghost" id="tile-set" style="font-size:11.5px;padding:4px 10px">📐 卡片布局</button></span>
     </div>
-    <div class="bento reveal">
+    <div class="bento reveal" data-sectitle="今日节奏">
       ${clockCard}
       ${focusTileHTML()}
       ${quickTileHTML()}
       ${overviewTileHTML()}
     </div>
 
-    ${grp("习惯与待办","HABITS&nbsp;&nbsp;&&nbsp;&nbsp;TASKS")}
-    <div class="bento reveal">${habitTileHTML()}${todoTileHTML()}</div>
+    ${sec("习惯与待办","HABITS&nbsp;&nbsp;&&nbsp;&nbsp;TASKS",`<div class="bento reveal">${habitTileHTML()}${todoTileHTML()}</div>`)}
 
-    ${grp("专注与状态","FOCUS&nbsp;&nbsp;&&nbsp;&nbsp;MOOD")}
-    <div class="bento reveal">${pomoTileHTML()}${trendTileHTML()}</div>
+    ${sec("专注与状态","FOCUS&nbsp;&nbsp;&&nbsp;&nbsp;MOOD",`<div class="bento reveal">${pomoTileHTML()}${trendTileHTML()}</div>`)}
 
-    ${grp("收支与成长","MONEY&nbsp;&nbsp;&&nbsp;&nbsp;GROWTH")}
-    <div class="bento reveal">${spendTileHTML()}${booksTileHTML()}</div>
+    ${sec("收支与成长","MONEY&nbsp;&nbsp;&&nbsp;&nbsp;GROWTH",`<div class="bento reveal">${spendTileHTML()}${booksTileHTML()}</div>`)}
 
     <div style="margin:24px 0 12px;text-align:center;padding-top:16px;border-top:1px solid var(--border)">
       <button class="btn ghost" id="share-png" style="font-size:12.5px;padding:7px 18px;gap:6px">
@@ -1918,6 +1923,29 @@ function renderHome(){
         分享今日成果（导出 PNG）
       </button>
     </div>`;
+  // v1.13.0: 自定义仪表盘 — 卡片布局选择器
+  const ts=$("#tile-set");
+  if(ts) ts.onclick=()=>{
+    const names=["今日节奏","习惯与待办","专注与状态","收支与成长"];
+    const cur=(data.__ui||{}).tiles||{};
+    const overlay=document.createElement("div"); overlay.className="overlay";
+    overlay.innerHTML=`<div class="modal"><h3>自定义仪表盘</h3>
+      <div class="sub">选择首页显示的卡片区，布局顺序固定、显隐自由</div>
+      ${names.map(n=>`<label style="display:flex;align-items:center;gap:8px;padding:8px 4px;font-size:13px;cursor:pointer">
+        <input type="checkbox" data-sec="${esc(n).replace(/"/g,'&quot;')}" ${cur[n]? 'checked':''} style="width:15px;height:15px;accent-color:var(--accent)">
+        ${n}</label>`).join("")}
+      <div class="modal-actions"><button class="btn ghost" id="ts-reset">恢复默认</button><div class="spacer"></div>
+        <button class="btn" id="ts-save">保存布局</button></div></div>`;
+    document.body.appendChild(overlay);
+    const close2=()=>overlay.remove();
+    overlay.onclick=e=>{ if(e.target===overlay) close2(); };
+    overlay.querySelector("#ts-save").onclick=()=>{
+      data.__ui=data.__ui||{}; data.__ui.tiles={};
+      overlay.querySelectorAll("input[data-sec]").forEach(cb=>{ data.__ui.tiles[cb.dataset.sec]=cb.checked; });
+      store.save(); close2(); render(); toast("首页布局已保存");
+    };
+    overlay.querySelector("#ts-reset").onclick=()=>{ delete data.__ui.tiles; store.save(); render(); toast("已恢复默认布局"); };
+  };
   wireHome();
   startClock();
 }
