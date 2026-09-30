@@ -2512,7 +2512,7 @@ function recHTML(m,x){
       <span class="rdate">${x.date||''}</span>${customBlock}</div>
       <div class="amt ${inc?'inc':'exp'}">${inc?'+':'-'}¥${x.amount}</div></div></div>`; }
    // note
-   const _hasMd=x.content&&/(^#{1,4}\s|^\s*[-*]\s|^\s*\d+[.)]\s|```|\*\*.+?\*\*)/m.test(x.content);
+   const _hasMd=x.content&&/(^#{1,4}\s|^\s*[-*]\s|^\s*\d+[)(.]\s|```|\*\*.+?\*\*)/m.test(x.content);
    return `<div class="rec ${layoutCls}">${acts}<div class="top" style="padding-right:60px">${thumb}<div class="body" data-edit="${x.id}">
      <span class="rname">${esc(x.title||'无标题')}${_hasMd?' <span style="font-size:9.5px;font-weight:800;color:var(--accent);border:1px solid var(--accent);border-radius:3px;padding:0 4px;vertical-align:1px;letter-spacing:.04em">MD</span>':''}</span>
      ${x.mood?`<span class="badge" style="background:var(--accent-muted);color:var(--accent)">${esc(x.mood)}</span>`:''}
@@ -2558,7 +2558,7 @@ function mdRender(src){
     if(/^\s*>/.test(line)){ closeList(); out.push(`<div style="border-left:3px solid var(--accent);padding:2px 10px;color:var(--text-secondary);margin:4px 0;font-size:12.5px">${inline(line.replace(/^\s*>\s?/,""))}</div>`); return; }
     const ul=line.match(/^\s*[-*]\s+(.*)$/);
     if(ul){ if(inList!=="ul"){ closeList(); out.push('<ul style="margin:4px 0;padding-left:18px;line-height:1.7">'); inList="ul"; } out.push(`<li>${inline(ul[1])}</li>`); return; }
-    const ol=line.match(/^\s*\d+[.)]\s+(.*)$/);
+    const ol=line.match(/^\s*\d+[)(.]\s+(.*)$/);
     if(ol){ if(inList!=="ol"){ closeList(); out.push('<ol style="margin:4px 0;padding-left:18px;line-height:1.7">'); inList="ol"; } out.push(`<li>${inline(ol[1])}</li>`); return; }
     closeList();
     if(line.trim()==="") return;
@@ -2600,7 +2600,7 @@ function wireModule(key){ const m=modOf(key);
   $("#screen").querySelectorAll("[data-edit]").forEach(el=>el.onclick=e=>{
     const item=(data[key]).find(i=>i.id==el.dataset.edit); if(!item) return;
     // v1.13.0: 笔记内容含 Markdown 语法时优先展示渲染预览，浮层内可切编辑
-    if(m.type==="note" && item.content && /(^#{1,4}\s|^\s*[-*]\s|^\s*\d+[.)]\s|```|\*\*.+?\*\*|`[^`]+`|\[.+?\]\(.+?\))/.test(item.content)){
+    if(m.type==="note" && item.content && /(^#{1,4}\s|^\s*[-*]\s|^\s*\d+[)(.]\s|```|\*\*.+?\*\*|`[^`]+`)/.test(item.content)){
       e.stopPropagation();
       openNoteDetail(key,item,()=>openEditor(key,item));
     } else openEditor(key,item);
