@@ -1112,7 +1112,7 @@
         <span class="sync-badge" id="syncBadge">未启用同步</span>
         <button class="sync-btn" id="btnSync" type="button">同步</button>
       </div>
-      <div class="foot-hint">数据默认存本机 · 自动备份 · 可开启多端同步 · v1.13.0</div>
+      <div class="foot-hint">数据默认存本机 · 自动备份 · 可开启多端同步 · v1.14.0</div>
       <div class="foot-actions">
         <button class="foot-btn" id="btnSystemCfg" type="button" style="width:100%">系统配置</button>
       </div>
@@ -1391,7 +1391,17 @@ const storage = (() => {
 const store = {
   load(){
     const raw = storage.getItem(CONFIG.storageKey);
-    if(raw){ try { return JSON.parse(raw); } catch(e){} }
+    if(raw){
+      try{
+        const parsed = JSON.parse(raw);
+        // 加固：解析结果必须是"纯对象"才可用；数组/字符串/null/数字/布尔一律视为损坏，走 seed 兜底
+        if(parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+        console.warn("[store] 检测到损坏的本地数据（非对象），已重置为默认数据。请导出旧备份后可重新导入。");
+      }catch(e){
+        // 加固：JSON 解析失败不再静默吞掉——记录并回退 seed，保证页面始终能渲染（避免整页空白）
+        console.warn("[store] 本地数据 JSON 解析失败，已重置为默认数据：" + e.message);
+      }
+    }
     const d={}; CONFIG.modules.forEach(m=>d[m.key]=structuredClone(m.seed||[]));
     // 默认趋势数据（近 7 天状态评分）
     d.__trend = [7, 6, 8, 5, 7, 8, 9];
@@ -1559,7 +1569,7 @@ function openSyncPanel(){
   overlay.innerHTML = `
     <div class="modal">
       <h3>多端同步设置</h3>
-      <div class="sub">连接一个轻量后端，手机 / 电脑 / 平板的数据自动保持一致。未配置时数据仍只存本机。当前版本 <b>v1.13.0</b>。</div>
+      <div class="sub">连接一个轻量后端，手机 / 电脑 / 平板的数据自动保持一致。未配置时数据仍只存本机。当前版本 <b>v1.14.0</b>。</div>
       <div class="field"><label>后端地址</label><input id="sy-url" class="sy-input" placeholder="http://192.168.1.20:8787 或 https://your.host" value="${attr(c.url||"")}"/></div>
       <div class="field"><label>同步令牌 Token</label><input id="sy-token" class="sy-input" placeholder="自定义一段足够长的随机密钥" value="${attr(c.token||"")}"/></div>
       <div class="sy-status" id="sy-status">${ sync.on ? ("已连接 · 上次同步：" + sync.fmtLast()) : "尚未启用同步" }</div>
@@ -2235,7 +2245,10 @@ function renderInsight(){
 
 /* ---------- MODULE VIEW ---------- */
 function renderModule(key){
-  const m=modOf(key); const all=data[key]||[]; let it=all;
+  const m=modOf(key);
+  // 加固：未知模块 key（老路由/损坏数据带出的非法 view）不得让 m.type 抛错导致整页空白——降级到首页
+  if(!m){ view="home"; return render(); }
+  const all=data[key]||[]; let it=all;
   const t=today();
   const q=searchQ.trim().toLowerCase();
   if(q) it=all.filter(x=>(x.title||"").toLowerCase().includes(q)||(x.note||x.content||"").toLowerCase().includes(q));
@@ -2926,6 +2939,8 @@ function daysToMd(md){ const n=new Date(); const mk=y=>new Date(y,+md.slice(0,2)
 function nextHoliday(){ const n=new Date(); for(let i=0;i<400;i++){ const d=new Date(n); d.setDate(n.getDate()+i); const hi=holidayInfo(fmtLocal(d)); if(hi&&hi.type==="off") return {name:hi.name,days:i}; } return null; }
 /* 老数据平滑升级：补齐提醒/番茄/个人信息默认键 */
 function ensureV2(d){
+  // 加固：模块字段被污染成非数组（字符串/对象/null）会让各处 filter/forEach 抛错 → 空白页。这里统一归一化为数组
+  CONFIG.modules.forEach(m=>{ if(!Array.isArray(d[m.key])) d[m.key]=[]; });
   if(!Array.isArray(d.remind)) d.remind=[];
   if(!d.focus||typeof d.focus!=="object"||Array.isArray(d.focus)) d.focus={focusMin:25,breakMin:5,goal:8};
   if(!d.profile||typeof d.profile!=="object"||Array.isArray(d.profile)) d.profile={nickname:"",gender:"",birthday:"",phone:"",email:"",wechat:"",city:"",job:"",motto:""};
@@ -3041,8 +3056,9 @@ function remTick(){
 }
 
 /* ---------- 更新日志 ---------- */
-const APP_VERSION="1.13.0";
+const APP_VERSION="1.14.0";
 const CHANGELOG=[
+  {v:"1.14.0",date:"2026-09-30",title:"空白页根治·启动崩溃兜底",fixes:["store.load 不再静默吞掉损坏/非对象数据，解析失败或 JSON 非对象时回退 seed 并告警","ensureV2 归一化所有模块字段，被污染成非数组（字符串/对象/null）不再导致 filter/forEach 崩溃","renderModule 未知模块 key 降级到首页，不再 TypeError 静默空白","启动序列包 try/catch 兜底：任何启动异常显示可读故障卡片 + 一键重试/重置，不再整页空白","新增 window 级未捕获异常兜底，后续异步/事件崩溃不再静默"]},
   {v:"1.13.0",date:"2026-09-30",title:"日历视图·番茄变体·统计图表·提醒增强",fixes:["日历视图：月历网格+事件点+节假日叠加+日详情","番茄工作法变体：经典/短频/深度/中长 4 种预设一键切换","统计图表：雷达图（6维习惯）+ 直方图（支出分布）","提醒增强：每周/每月重复、14天提前提醒、时区感知匹配","目标拆解：子任务自动推进进度条","成就系统：7 类徽章动态解锁","自定义仪表盘：模块 tile 可见性开关","Markdown 笔记：标题/列表/代码块/引用/链接渲染"]},
   {v:"1.12.0",date:"2026-09-29",title:"首页极致压缩·同屏无滚动",fixes:["main/bento/tile/sec-grp 间距全面缩减","clock-card/ring/ov2-side/pomo 元素尺寸压缩","trend SVG 高度 170→130，footer 间距压缩","spend/book-list/focus/habit/todo 行间距压缩","修复重复的 APP_VERSION/CHANGELOG 代码块"]},
   {v:"1.11.0",date:"2026-09-29",title:"深色卡片转浅色 + 首页同屏压缩",fixes:["clock-card/ov2-side/pomo 三块深色卡片改为浅色统一风格","移除暗色渐变与装饰光晕，使用 var(--surface-card) 背景","首页高度进一步压缩，确保同屏无滚动"]},
@@ -3315,7 +3331,7 @@ function renderRemind(){
       toast("云端触达配置已保存");
     }catch(e){ toast("已保存到本地，云端保存失败："+e.message); }
   };
-  if(sync.on) fetch(sync._url("/remind/config")).then(r=>r.ok?r.json():null).then(j=>{ if(j&&j.config){ data.__cloudRemind=j.config; } }).catch(()=>{});
+  if(sync.on) try{ fetch(sync._url("/remind/config")).then(r=>r.ok?r.json():null).then(j=>{ if(j&&j.config){ data.__cloudRemind=j.config; } }).catch(()=>{}); }catch(e){}
 }
 function openRemindEditor(id){
   const it=id!=null?(data.remind||[]).find(x=>x.id==id)||{}:{};
@@ -4404,8 +4420,34 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
   
   })();
 
-buildNav();
-render();
+// 启动序列包一层兜底：任何一处意外异常都不再让 #screen 静默空白，而是显示可读的故障卡片 + 一键重置
+try{
+  buildNav();
+  render();
+}catch(bootErr){
+  console.error("[workbench] 启动渲染失败，已显示兜底界面：", bootErr);
+  try{
+    var _bs=document.getElementById("screen");
+    if(_bs){ _bs.innerHTML =
+      '<div class="header"><div><h2>页面渲染失败</h2><p>可能是本地数据损坏或未知模块导致。</p></div><div class="spacer"></div></div>'+
+      '<div class="empty" style="margin-top:20px"><span class="e">⚠️</span><div>渲染遇到异常，无法显示当前视图</div>'+
+      '<div style="font-size:12.5px;color:var(--text-tertiary);margin-top:6px;max-width:520px;white-space:pre-wrap">'+String(bootErr&&bootErr.message||bootErr)+'</div>'+
+      '<div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">'+
+      '<button class="btn" id="boot-retry">重试渲染</button>'+
+      '<button class="btn ghost" id="boot-reset">重置本地数据</button></div></div>';
+      var _rt=document.getElementById("boot-retry"); if(_rt)_rt.onclick=function(){ view="home"; render(); };
+      var _rs=document.getElementById("boot-reset"); if(_rs)_rs.onclick=function(){
+        if(!confirm("确定清空本机所有工作台数据并重置？重置前请先在「系统配置」导出备份。")) return;
+        try{ storage.removeItem(CONFIG.storageKey); }catch(_e){}
+        location.reload();
+      };
+    }
+  }catch(_e){ console.error("[workbench] 兜底界面渲染失败", _e); }
+}
+// 全局未捕获异常兜底（窗口级）：避免后续异步/事件里的崩溃再次静默空白
+window.addEventListener("error",function(ev){
+  console.error("[workbench] 未捕获异常：", ev.error||ev.message);
+});
 sync.badge(sync.on ? "自动同步中" : "未启用同步");
 sync.startAuto(); if(sync.on) sync.pull(true).then(()=>{ if((sync.cfg().rev||0)===0 && data && Object.keys(data).length) sync.push(); });
 (function(){ try{ var _cut=(function(){var _d=new Date();_d.setDate(_d.getDate()-30);return fmtLocal(_d);})(); if((data.__trash||[]).length){ var _before=data.__trash.length; data.__trash=data.__trash.filter(function(t){ return !t.__deletedAt || t.__deletedAt>=_cut; }); if(data.__trash.length!==_before) store.saveLocal(); } bak.save(JSON.stringify(data)); /* v1.9.4: 移除"距上次备份超过 x 天"打扰式提醒，改为每日自动快照 */ }catch(e){} })();
