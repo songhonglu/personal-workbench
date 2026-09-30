@@ -1211,7 +1211,7 @@
         <span class="sync-badge" id="syncBadge">未启用同步</span>
         <button class="sync-btn" id="btnSync" type="button">同步</button>
       </div>
-       <div class="foot-hint">数据默认存本机 · 自动备份 · 可开启多端同步 · v1.15.1</div>
+       <div class="foot-hint">数据默认存本机 · 自动备份 · 可开启多端同步 · v1.16.0</div>
       <div class="foot-actions">
         <button class="foot-btn" id="btnSystemCfg" type="button" style="width:100%">系统配置</button>
       </div>
@@ -1614,7 +1614,7 @@ function openSyncPanel(){
   overlay.innerHTML = `
     <div class="modal">
       <h3>多端同步设置</h3>
-      <div class="sub">连接一个轻量后端，手机 / 电脑 / 平板的数据自动保持一致。未配置时数据仍只存本机。当前版本 <b>v1.15.1</b>。</div>
+      <div class="sub">连接一个轻量后端，手机 / 电脑 / 平板的数据自动保持一致。未配置时数据仍只存本机。当前版本 <b>v1.16.0</b>。</div>
       <div class="field"><label>后端地址</label><input id="sy-url" class="sy-input" placeholder="http://192.168.1.20:8787 或 https://your.host" value="${attr(c.url||"")}"/></div>
       <div class="field"><label>同步令牌 Token</label><input id="sy-token" class="sy-input" placeholder="自定义一段足够长的随机密钥" value="${attr(c.token||"")}"/></div>
       <div class="sy-status" id="sy-status">${ sync.on ? ("已连接 · 上次同步：" + sync.fmtLast()) : "尚未启用同步" }</div>
@@ -3806,7 +3806,7 @@ function importData(file){
   r.readAsText(file);
 }
 if($("#btnSync")) $("#btnSync").onclick=()=>sync.openPanel();
-// v1.15.1: 顶层 DOM 绑定统一加 null 防护——按钮缺失时不再中断整个主脚本（此前 #btnBak 孤儿绑定是空白页根因之一）
+// v1.16.0: 顶层 DOM 绑定统一加 null 防护——按钮缺失时不再中断整个主脚本（此前 #btnBak 孤儿绑定是空白页根因之一）
 function mk2(k){ return {todo:"待办",money:"记账",note:"笔记",read:"阅读",checkin:"习惯",progress:"目标",focus:"专注",remind:"提醒"}[k]||k; }
 function csvExport(){
   const lines=[["模块","类型","标题","内容/备注","日期","金额","完成","进度","分类","标签"]];
@@ -3976,7 +3976,7 @@ function openBakPanel(){
     if(confirm("用 "+d+" 的快照覆盖当前全部数据？恢复前会把当前数据先自动快照一份，可再次恢复撤销。")){ bak.save(JSON.stringify(data)); bak.restore(d); close(); }
   });
 }
-// v1.15.1: #btnBak 按钮在 v1.13 收编进「系统配置」后已移除，原 $("#btnBak").onclick 属孤儿绑定（null.onclick 会中断整个主脚本），改为防御式绑定
+// v1.16.0: #btnBak 按钮在 v1.13 收编进「系统配置」后已移除，原 $("#btnBak").onclick 属孤儿绑定（null.onclick 会中断整个主脚本），改为防御式绑定
 var _btnBakEl = document.getElementById("btnBak");
 if (_btnBakEl) _btnBakEl.onclick = openBakPanel;
 
@@ -4482,7 +4482,7 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
   })();
 
 // 启动序列包一层兜底：任何一处意外异常都不再让 #screen 静默空白，而是显示可读的故障卡片 + 一键重置
-// v1.15.1: 启动兜底卡片新增「清除旧浏览器缓存」按钮（旧 Service Worker Cache Storage 冻结旧页面的自愈入口）
+// v1.16.0: 启动兜底卡片新增「清除旧浏览器缓存」按钮（旧 Service Worker Cache Storage 冻结旧页面的自愈入口）
 try{
   buildNav();
   render();
