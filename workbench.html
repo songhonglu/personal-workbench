@@ -1112,7 +1112,7 @@
         <span class="sync-badge" id="syncBadge">未启用同步</span>
         <button class="sync-btn" id="btnSync" type="button">同步</button>
       </div>
-      <div class="foot-hint">数据默认存本机 · 自动备份 · 可开启多端同步 · v1.14.0</div>
+       <div class="foot-hint">数据默认存本机 · 自动备份 · 可开启多端同步 · v1.15.0</div>
       <div class="foot-actions">
         <button class="foot-btn" id="btnSystemCfg" type="button" style="width:100%">系统配置</button>
       </div>
@@ -1494,34 +1494,6 @@ const sync = {
     }catch(e){ this.badge("同步失败"); toast("覆盖失败："+e.message); console.warn("[sync] forcePull:",e); }
     finally{ this._busy=false; }
   },
-  async forcePush(){   // v1.9.6: 用本机整体覆盖云端（同步分歧收敛逃生舱）
-    if(!this.on){ toast("未开启同步"); return; }
-    if(this._busy) return; this._busy=true; this.badge("覆盖中…");
-    try{
-      try{ ensureV2(data); }catch(_e){}
-      const res=await fetch(this._url("/data"),{method:"PUT",headers:{"Content-Type":"application/json"},body:JSON.stringify({data})});
-      if(!res.ok) throw new Error("HTTP "+res.status);
-      const r=await res.json().catch(()=>({}));
-      if(r.rev!=null) this.set("rev",r.rev); if(r.updatedAt) this.set("updatedAt",r.updatedAt);
-      this.set("lastSync",Date.now()); this._saveBase(data); this.badge("已同步"); toast("已用本机数据覆盖云端");
-    }catch(e){ this.badge("同步失败"); toast("覆盖失败："+e.message); console.warn("[sync] forcePush:",e); }
-    finally{ this._busy=false; }
-  },
-  async forcePull(){   // v1.9.6: 用云端整体覆盖本机（同步分歧收敛逃生舱）
-    if(!this.on){ toast("未开启同步"); return; }
-    if(this._busy) return; this._busy=true; this.badge("拉取中…");
-    try{
-      const res=await fetch(this._url("/data"),{method:"GET"});
-      if(!res.ok) throw new Error("HTTP "+res.status);
-      const r=await res.json().catch(()=>({}));
-      if(!r||r.data==null) throw new Error("云端暂无数据");
-      try{ bak.save(JSON.stringify(data)); }catch(_e){}   // 覆盖前自动快照，可从备份恢复撤销
-      data=r.data; ensureV2(data); autoTrend(); store.saveLocal();
-      if(r.rev!=null) this.set("rev",r.rev); if(r.updatedAt) this.set("updatedAt",r.updatedAt);
-      this.set("lastSync",Date.now()); this._saveBase(data); render(); this.badge("已同步"); toast("已用云端数据覆盖本机");
-    }catch(e){ this.badge("同步失败"); toast("覆盖失败："+e.message); console.warn("[sync] forcePull:",e); }
-    finally{ this._busy=false; }
-  },
   _baseKey(){ return SYNC_KEY+"::base"; },
   _saveBase(d){ try{ storage.setItem(this._baseKey(), JSON.stringify(d)); }catch(e){} },
   _base(){ try{ const s=storage.getItem(this._baseKey()); return s?JSON.parse(s):null; }catch(e){ return null; } },
@@ -1569,7 +1541,7 @@ function openSyncPanel(){
   overlay.innerHTML = `
     <div class="modal">
       <h3>多端同步设置</h3>
-      <div class="sub">连接一个轻量后端，手机 / 电脑 / 平板的数据自动保持一致。未配置时数据仍只存本机。当前版本 <b>v1.14.0</b>。</div>
+      <div class="sub">连接一个轻量后端，手机 / 电脑 / 平板的数据自动保持一致。未配置时数据仍只存本机。当前版本 <b>v1.15.0</b>。</div>
       <div class="field"><label>后端地址</label><input id="sy-url" class="sy-input" placeholder="http://192.168.1.20:8787 或 https://your.host" value="${attr(c.url||"")}"/></div>
       <div class="field"><label>同步令牌 Token</label><input id="sy-token" class="sy-input" placeholder="自定义一段足够长的随机密钥" value="${attr(c.token||"")}"/></div>
       <div class="sy-status" id="sy-status">${ sync.on ? ("已连接 · 上次同步：" + sync.fmtLast()) : "尚未启用同步" }</div>
@@ -1884,16 +1856,17 @@ function booksTileHTML(){
     <div class="book-list">${rows}</div></div>`;
 }
 
-/* 本周目标：sport (progress) 各项进度条 */
+/* 本周目标：sport 模块在 v1.13 移除，此函数为历史遗留死代码（无调用者）。
+   v1.15.0: 修正 data.sport 死引用 → data.read（阅读目标），避免未来误用导致 undefined */
 function goalsTileHTML(){
-  const all=data.sport||[]; const colors=["var(--module-3)","var(--module-1)","var(--module-2)","var(--module-4)","var(--module-5)"];
+  const all=data.read||[]; const colors=["var(--module-3)","var(--module-1)","var(--module-2)","var(--module-4)","var(--module-5)"];
   const rows=all.length? all.map((x,i)=>{ const pct=Math.min(100,Math.round((x.current/x.target)*100||0)); const col=colors[i%colors.length];
     return `<div class="book-row"><span class="spine" style="background:${col}">${icon("activity",16)}</span>
       <div class="bmid"><div class="btt">${pct>=100?`<span style="color:var(--module-1);display:inline-flex;vertical-align:-2px;margin-right:3px">${icon("check",13,2.6)}</span>`:''}${esc(x.title)}</div>
         <div class="bsub">${x.current}/${x.target} ${x.unit||'次'}</div>
         <div class="bbar"><i style="width:${pct}%;background:${col}"></i></div></div><span class="bpct" style="color:${col}">${pct}%</span></div>`; }).join("")
-    : `<div class="focus-empty">还没有锻炼目标，去「每日锻炼」添加吧</div>`;
-  return `<div class="tile b4"><div class="tile-h"><span class="tic">${icon("activity",16)}</span><div class="tt"><span class="en">WEEKLY GOALS</span><span class="zh">本周目标</span></div><span class="r js-open" data-open="sport">${all.length} 项</span></div>
+    : `<div class="focus-empty">还没有阅读目标，去「阅读」添加吧</div>`;
+  return `<div class="tile b4"><div class="tile-h"><span class="tic">${icon("activity",16)}</span><div class="tt"><span class="en">WEEKLY GOALS</span><span class="zh">本周目标</span></div><span class="r js-open" data-open="read">${all.length} 项</span></div>
     <div class="book-list">${rows}</div></div>`;
 }
 
@@ -3056,8 +3029,9 @@ function remTick(){
 }
 
 /* ---------- 更新日志 ---------- */
-const APP_VERSION="1.14.0";
+const APP_VERSION="1.15.0";
 const CHANGELOG=[
+  {v:"1.15.0",date:"2026-09-30",title:"根治清缓存后仍空白·旧 Service Worker 缓存",fixes:["根因：浏览器 PWA Service Worker 旧缓存（Cache Storage，独立于 localStorage）冻结着 v1.13 旧页面，且 controllerchange 自动 reload 死循环让 v1.14 兜底代码从未被执行","sw.js 缓存名升级到 wb-v2.1.0，activate 时自动清除所有旧 wb-* 历史缓存","HTML 请求严格 network-first：联网永远拿最新页面，仅断网回退缓存，从机制上杜绝设备停留在旧版代码","删除孤儿 DOM 绑定：#btnBak 按钮早已移除但代码仍做 null.onclick 赋值，异常会中断整个主脚本","清理 sync 对象中 forcePush/forcePull 的重复定义","数据管理页新增「清除旧 Service Worker 缓存」按钮，可一键清除浏览器里冻结的旧版页面","修复首页运动目标瓦片指向不存在的 sport 模块，改为 read 阅读目标"]},
   {v:"1.14.0",date:"2026-09-30",title:"空白页根治·启动崩溃兜底",fixes:["store.load 不再静默吞掉损坏/非对象数据，解析失败或 JSON 非对象时回退 seed 并告警","ensureV2 归一化所有模块字段，被污染成非数组（字符串/对象/null）不再导致 filter/forEach 崩溃","renderModule 未知模块 key 降级到首页，不再 TypeError 静默空白","启动序列包 try/catch 兜底：任何启动异常显示可读故障卡片 + 一键重试/重置，不再整页空白","新增 window 级未捕获异常兜底，后续异步/事件崩溃不再静默"]},
   {v:"1.13.0",date:"2026-09-30",title:"日历视图·番茄变体·统计图表·提醒增强",fixes:["日历视图：月历网格+事件点+节假日叠加+日详情","番茄工作法变体：经典/短频/深度/中长 4 种预设一键切换","统计图表：雷达图（6维习惯）+ 直方图（支出分布）","提醒增强：每周/每月重复、14天提前提醒、时区感知匹配","目标拆解：子任务自动推进进度条","成就系统：7 类徽章动态解锁","自定义仪表盘：模块 tile 可见性开关","Markdown 笔记：标题/列表/代码块/引用/链接渲染"]},
   {v:"1.12.0",date:"2026-09-29",title:"首页极致压缩·同屏无滚动",fixes:["main/bento/tile/sec-grp 间距全面缩减","clock-card/ring/ov2-side/pomo 元素尺寸压缩","trend SVG 高度 170→130，footer 间距压缩","spend/book-list/focus/habit/todo 行间距压缩","修复重复的 APP_VERSION/CHANGELOG 代码块"]},
@@ -3232,7 +3206,7 @@ function buildNav(){
   $("#nav").innerHTML=html.join("");
   $("#nav").querySelectorAll("[data-go]").forEach(el=>el.onclick=()=>go(el.dataset.go));
   renderNavActive();
-  $("#btnSystemCfg").onclick=()=>go("system");
+  if($("#btnSystemCfg")) $("#btnSystemCfg").onclick=()=>go("system");
 }
 function renderNavActive(){ $("#nav").querySelectorAll(".navi").forEach(el=>el.classList.toggle("active", el.dataset.go===view)); }
 
@@ -3726,9 +3700,9 @@ function renderProfile(){
 }
 
 /* ---------- avatar upload ---------- */
-$("#avaCam").innerHTML = icon("camera",18);
-if(data.__avatar) $("#avaImg").src = data.__avatar;
-$("#ava").onclick = () => $("#avatarInput").click();
+if($("#avaCam")) $("#avaCam").innerHTML = icon("camera",18);
+if(data.__avatar && $("#avaImg")) $("#avaImg").src = data.__avatar;
+$("#ava").onclick = () => { const _ai=$("#avatarInput"); if(_ai) _ai.click(); };
 $("#avatarInput").onchange = e => {
   const f = e.target.files && e.target.files[0];
   if(!f) return;
@@ -3769,7 +3743,9 @@ function importData(file){
   }catch(e){ toast("解析失败："+e.message); } };
   r.readAsText(file);
 }
-$("#btnSync").onclick=()=>sync.openPanel();
+if($("#btnSync")) if($("#btnSync")) $("#btnSync").onclick=()=>sync.openPanel();
+// v1.15.0: 顶层 DOM 绑定统一加 null 防护——按钮缺失时不再中断整个主脚本（此前 #btnBak 孤儿绑定是空白页根因之一）
+// v1.15.0: 顶层 DOM 绑定统一加 null 防护——按钮缺失时不再中断整个主脚本（此前 #btnBak 孤儿绑定是空白页根因之一）
 function mk2(k){ return {todo:"待办",money:"记账",note:"笔记",read:"阅读",checkin:"习惯",progress:"目标",focus:"专注",remind:"提醒"}[k]||k; }
 function csvExport(){
   const lines=[["模块","类型","标题","内容/备注","日期","金额","完成","进度","分类","标签"]];
@@ -3838,6 +3814,11 @@ function renderSystemCfg(){
       <button class="btn" id="sys-sync">配置同步后端</button>
       <div class="sub" style="margin-top:10px">状态：${sync.on?("已连接 · 上次同步 "+sync.fmtLast()):"未启用"}</div>
     </div>
+    <div class="side-card" style="margin:0">
+      <div class="sh">${icon("cog",15)} 浏览器缓存自愈</div>
+      <div class="sub" style="margin:6px 0 12px">页面加载后仍显示旧版 / 空白时，一键清除浏览器 Service Worker 冻结的旧页面（不影响本地数据）。</div>
+      <button class="btn ghost" id="sys-clearsw">清除旧 Service Worker 缓存</button>
+    </div>
   </div>`;
   $("#sys-export").onclick=exportData;
   $("#sys-import").onclick=()=>$("#sys-import-file").click();
@@ -3847,6 +3828,18 @@ function renderSystemCfg(){
   $("#sys-csv-file").onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(f) csvImport(f); e.target.value=""; };
   $("#sys-bak").onclick=openBakPanel;
   $("#sys-sync").onclick=()=>sync.openPanel();
+  if($("#sys-clearsw")) $("#sys-clearsw").onclick=function(){
+    var cleared=[];
+    var done=function(){ toast("已清除旧缓存（"+cleared.length+" 项），正在重新加载…"); setTimeout(function(){ location.reload(); }, 400); };
+    if("caches" in window){
+      caches.keys().then(function(ks){
+        cleared=ks.filter(function(k){ return k.indexOf("wb-")===0; });
+        return Promise.all(ks.filter(function(k){ return k.indexOf("wb-")===0; }).map(function(k){ return caches.delete(k); }));
+      }).then(function(){
+        if("serviceWorker" in navigator){ return navigator.serviceWorker.getRegistration().then(function(r){ if(r) return r.unregister(); }).catch(function(){}); }
+      }).then(done).catch(done);
+    } else done();
+  };
 }
 
 /* ---------- 自动备份：每日滚动快照（v1.9.4，静默运行，零交互） ---------- */
@@ -3917,7 +3910,9 @@ function openBakPanel(){
     if(confirm("用 "+d+" 的快照覆盖当前全部数据？恢复前会把当前数据先自动快照一份，可再次恢复撤销。")){ bak.save(JSON.stringify(data)); bak.restore(d); close(); }
   });
 }
-$("#btnBak").onclick=openBakPanel;
+// v1.15.0: #btnBak 按钮在 v1.13 收编进「系统配置」后已移除，原 $("#btnBak").onclick 属孤儿绑定（null.onclick 会中断整个主脚本），改为防御式绑定
+var _btnBakEl = document.getElementById("btnBak");
+if (_btnBakEl) _btnBakEl.onclick = openBakPanel;
 
 /* ---------- utils ---------- */
 function esc(s){ return String(s??"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
@@ -4421,6 +4416,7 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
   })();
 
 // 启动序列包一层兜底：任何一处意外异常都不再让 #screen 静默空白，而是显示可读的故障卡片 + 一键重置
+// v1.15.0: 启动兜底卡片新增「清除旧浏览器缓存」按钮（旧 Service Worker Cache Storage 冻结旧页面的自愈入口）
 try{
   buildNav();
   render();
@@ -4429,13 +4425,27 @@ try{
   try{
     var _bs=document.getElementById("screen");
     if(_bs){ _bs.innerHTML =
-      '<div class="header"><div><h2>页面渲染失败</h2><p>可能是本地数据损坏或未知模块导致。</p></div><div class="spacer"></div></div>'+
+      '<div class="header"><div><h2>页面渲染失败</h2><p>可能是本地数据损坏、未知模块或浏览器缓存了旧版页面导致。</p></div><div class="spacer"></div></div>'+
       '<div class="empty" style="margin-top:20px"><span class="e">⚠️</span><div>渲染遇到异常，无法显示当前视图</div>'+
       '<div style="font-size:12.5px;color:var(--text-tertiary);margin-top:6px;max-width:520px;white-space:pre-wrap">'+String(bootErr&&bootErr.message||bootErr)+'</div>'+
       '<div style="margin-top:14px;display:flex;gap:10px;flex-wrap:wrap">'+
       '<button class="btn" id="boot-retry">重试渲染</button>'+
+      '<button class="btn ghost" id="boot-clearsw">清除旧浏览器缓存</button>'+
       '<button class="btn ghost" id="boot-reset">重置本地数据</button></div></div>';
       var _rt=document.getElementById("boot-retry"); if(_rt)_rt.onclick=function(){ view="home"; render(); };
+      var _cs=document.getElementById("boot-clearsw"); if(_cs)_cs.onclick=function(){
+        // 清除所有 wb-* 命名的 Service Worker 历史缓存（Cache Storage 独立于 localStorage，用户清缓存清不到）
+        var ok=false;
+        try{
+          if("caches"in window){
+            caches.keys().then(function(ks){
+              return Promise.all(ks.filter(function(k){ return k.indexOf("wb-")===0; }).map(function(k){ return caches.delete(k); }));
+            }).then(function(){ ok=true; }).catch(function(){});
+          }
+        }catch(_e){}
+        try{ if("serviceWorker"in navigator) navigator.serviceWorker.getRegistration().then(function(r){ if(r) r.unregister(); }).catch(function(){}); }catch(_e){}
+        setTimeout(function(){ location.reload(); }, ok?300:300);
+      };
       var _rs=document.getElementById("boot-reset"); if(_rs)_rs.onclick=function(){
         if(!confirm("确定清空本机所有工作台数据并重置？重置前请先在「系统配置」导出备份。")) return;
         try{ storage.removeItem(CONFIG.storageKey); }catch(_e){}
@@ -4449,7 +4459,7 @@ window.addEventListener("error",function(ev){
   console.error("[workbench] 未捕获异常：", ev.error||ev.message);
 });
 sync.badge(sync.on ? "自动同步中" : "未启用同步");
-sync.startAuto(); if(sync.on) sync.pull(true).then(()=>{ if((sync.cfg().rev||0)===0 && data && Object.keys(data).length) sync.push(); });
+sync.startAuto(); if(sync.on) sync.pull(true).then(function(){ if((sync.cfg().rev||0)===0 && data && Object.keys(data).length) sync.push(); }).catch(function(_e){ console.warn("[sync] 启动拉取失败：", _e); });
 (function(){ try{ var _cut=(function(){var _d=new Date();_d.setDate(_d.getDate()-30);return fmtLocal(_d);})(); if((data.__trash||[]).length){ var _before=data.__trash.length; data.__trash=data.__trash.filter(function(t){ return !t.__deletedAt || t.__deletedAt>=_cut; }); if(data.__trash.length!==_before) store.saveLocal(); } bak.save(JSON.stringify(data)); /* v1.9.4: 移除"距上次备份超过 x 天"打扰式提醒，改为每日自动快照 */ }catch(e){} })();
 (function(){ try{ initRecurBills(); }catch(e){} })();
 
