@@ -1,5 +1,17 @@
 # Changelog
 
+## v1.17.1 — 多用户体系修补版 · 好友消息通道健壮性（2026-10-01）
+
+### 修复：`wbFriends` 健壮性
+- `wbFriends.send()` 清理：移除冗余的 `iMap` 读取与未使用变量 `their`，同浏览器/跨设备两条路径的注释规范统一
+- `wbFriends.removeFriend()` 补齐跨设备端点：启用同步后端时 `POST /api/friends/{me}/remove` 解除服务端好友关系（best-effort，失败不阻塞本地）
+
+### 对齐
+- `APP_VERSION` 同步 1.17.0 → 1.17.1；内置 CHANGELOG 与 `docs/multiuser-plan.md` 对齐（密码本地 FNV-1a 散列说明，非安全级哈希）
+- 质检门禁：`node _test_smoke.js` 全绿、`workbench.html` 全部 `<script>` 块 `new Function` 编译通过、顶层 const/let/function 重复声明扫描无冲突
+
+---
+
 ## v1.17.0 — 多用户体系 + 好友系统（2026-10-01）
 
 ### 新增：账号体系（`wbUser`）

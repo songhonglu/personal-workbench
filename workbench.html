@@ -2046,6 +2046,10 @@ const wbFriends = {
     delete map[userId]; this._write(this._fKey(), map);
     const theirMap=this._read(FRIENDS_KEY+"::user::"+userId)||{};
     delete theirMap[this._uid()]; this._write(FRIENDS_KEY+"::user::"+userId, theirMap);
+    /* 跨设备：通知后端解除好友关系（best-effort，失败不阻塞本地） */
+    if(sync.on){
+      fetch(sync._apiBase()+"/api/friends/"+encodeURIComponent(this._uid())+"/remove", { method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer "+(sync.cfg().token||"")}, body:JSON.stringify({ friend:{ userId:userId } }) }).catch(()=>{});
+    }
     return {ok:true};
   },
   /* 发送待办/提醒给好友：type "todo"|"remind" */
@@ -2053,16 +2057,13 @@ const wbFriends = {
     const map=this._read(this._fKey())||{};
     if(!map[toUserId]) return {ok:false, err:"对方不是你的好友，请先添加好友"};
     const msg={ id:wbUid("msg"), from:this._uid(), fromName:this.me().nickname, type, payload, text, sentAt:Date.now(), read:false };
-    const iMap=this._read(this._iKey())||{};
     /* 同浏览器：直接写对方本地收件箱 */
     const theirInboxKey=INBOX_KEY+"::user::"+toUserId;
-    const their=iMap && iMap[toUserId];
     const theirStore=this._read(theirInboxKey)||[];
     theirStore.unshift(msg);
     this._write(theirInboxKey, theirStore);
-    /* 本地也留一份（若给自己/同浏览器） */
-    if(toUserId===this._uid()){ (iMap[this._uid()]||(iMap[this._uid()]=[])).unshift(msg); this._write(this._iKey(), iMap); }
-    /* 跨设备：若���用同步后端，推入后端 inbox（best-effort，失败不阻塞） */
+    /* 本地也留一份（若发给本机同浏览器账号） */
+    if(toUserId===this._uid()){ const iMap=this._read(this._iKey())||{}; (iMap[this._uid()]||(iMap[this._uid()]=[])).unshift(msg); this._write(this._iKey(), iMap); }
     /* 跨设备：若启用同步后端，投递到后端收件箱（best-effort，失败不阻塞本地） */
     if(sync.on){
       fetch(sync._apiBase()+"/api/friends/"+encodeURIComponent(toUserId)+"/send", { method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer "+(sync.cfg().token||"")}, body:JSON.stringify({ msg:{ from:this._uid(), to:toUserId, fromName:this.me().nickname, type, payload, text, sentAt:msg.sentAt } }) }).catch(()=>{});
@@ -3817,8 +3818,9 @@ function remTick(){
 }
 
 /* ---------- 更新日志 ---------- */
-const APP_VERSION="1.17.0";
+const APP_VERSION="1.17.1";
 const CHANGELOG=[
+  {v:"1.17.1",date:"2026-10-01",title:"多用户体系修补版 · 好友消息通道健壮性",fixes:["wbFriends.send 清理：移除冗余 iMap 读取与未用变量，同浏览器/跨设备路径注释规范","wbFriends.removeFriend 补齐跨设备端点：启用同步后端时 POST /api/friends/{me}/remove 解除服务端好友关系（best-effort 不阻塞本地）","APP_VERSION 同步 1.17.0 → 1.17.1，CHANGELOG 与 v1.17.0 文档对齐（FNV-1a 本地哈希实现说明）"]},
   {v:"1.17.0",date:"2026-10-01",title:"多用户体系 · 好友系统 · 跨设备消息通道",fixes:["账号体系：注册/登录/登出，密码本地 SHA-256+盐哈希存储，数据按 userId 命名空间完全隔离（未登录行为与旧版完全一致）","好友系统：双向好友关系，好友间发送待办/提醒，同浏览器零依赖直接用，跨设备走 sync-server v2 端点","收件箱：「来自好友」未读横幅 + 一键转入我的待办/提醒，已读状态跨设备同步","sync-server v2：新增 /api/friends 好友图 + 收件箱端点（send/inbox/add/remove/markread），保留原 /data 多端同步协议","质检门禁强化：冒烟测试新增 27 条多用户全链路断言 + 顶层重复声明静态扫描，78 PASS / 0 FAIL","修复：wbUser.cur() 循环调用栈溢出、wbFriends.markRead 逻辑 bug、前后端消息协议对齐"]},
   {v:"1.16.0",date:"2026-10-01",title:"多空间管理 · 场景预设模板 · 换肤增强",fixes:["多空间管理：支持创建独立数据空间（多账��/多门店/多场景），互不干扰","场景���设模板：零售多门店/政务多账号/直播排班/库存管理 4 套预设，一键启用","换肤增强：新增 Indigo 冷蓝 / Sage 灰绿 2 套色板，共 6 套","番茄钟自定义：支持手动输入任意专注/休息时长（5-120 分钟）"]},
   {v:"1.15.0",date:"2026-09-30",title:"根治清缓存后仍空白·旧 Service Worker 缓存",fixes:["根因：浏览器 PWA Service Worker 旧缓存（Cache Storage，独立于 localStorage）冻结着 v1.13 旧页面，且 controllerchange 自动 reload 死循环让 v1.14 兜底代码从未被执行","sw.js 缓存名升级到 wb-v2.1.0，activate 时自动清除所有旧 wb-* 历史缓存","HTML 请求严格 network-first：联网永远拿最新页面，仅断网回退缓存，从机制上杜绝设备停留在旧版代码","删除孤儿 DOM 绑定：#btnBak 按钮早已移除但代码仍做 null.onclick 赋值，异常会中断整个主脚本","清理 sync 对象中 forcePush/forcePull 的重复定义","数据管理页新增「清除旧 Service Worker 缓存」按钮，可一键清除浏览器里冻结的旧版页面","修复首页运动目标瓦片指向不存在的 sport 模块，改为 read 阅读目标"]},
