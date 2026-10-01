@@ -1151,7 +1151,7 @@
     backdrop-filter:blur(14px);border-top:1px solid var(--border)}
   .mob-nav .tab{display:flex;flex-direction:column;align-items:center;gap:3px;
     padding:8px 2px 7px;cursor:pointer;color:var(--text-tertiary);
-    font-size:10px;font-weight:600;transition:color .15s}
+    font-size:10px;font-weight:600;transition:color .15s;min-height:44px;position:relative}
   .mob-nav .tab svg{width:21px;height:21px}
   .mob-nav .tab.active{color:var(--accent)}
   .mob-nav .tab.active svg{stroke-width:2.4}
@@ -1181,6 +1181,18 @@
   /* 习惯表：缩小内边距与字号 */
   .habit-tb td,.habit-tb th{padding:5px 3px;font-size:12px}
   .habit-tb .hcell{width:24px;height:24px}
+  /* P0-1: 移动端触控区校准 */
+  .rec .chk{width:28px;height:28px}
+  .rec .batch-chk{width:28px;height:28px}
+  .rec .acts button{width:32px;height:32px}
+  .btn{min-height:44px}
+  .btn.ghost{min-height:38px}
+  /* P0-1: 移动端触控区校准 */
+  .rec .chk{width:28px;height:28px}
+  .rec .batch-chk{width:28px;height:28px}
+  .rec .acts button{width:32px;height:32px}
+  .btn{min-height:44px}
+  .btn.ghost{min-height:38px}
 
   /* 页脚/提示距底部 Tab 留出空间 */
   .toast{bottom:calc(var(--mob-nav-h) + 18px + env(safe-area-inset-bottom))}
@@ -1189,6 +1201,18 @@
   .modal{border-radius:18px 18px 0 0}
   .v2-layout > aside, .mod-side{gap:10px}
   .wb-search input{font-size:16px} /* 避免 iOS 自动放大 */
+
+  /* P0-1: 键盘弹起时，弹窗输入框上推不被遮挡 */
+  @media (max-width:899px){
+    .overlay{align-items:flex-end;padding:0}
+    .modal{width:100%;max-width:100%;max-height:88vh;margin-bottom:0}
+    .modal input,.modal select,.modal textarea{font-size:16px} /* 防 iOS 缩放 */
+  }
+}
+
+/* P0-1: 键盘弹起（移动端 visualViewport 收缩）→ 底部 Tab 栏隐藏，防止遮挡输入框 */
+@media (max-width:899px){
+  body.kb-open .mob-nav{display:none}
 }
 
 /* ---------- 视觉润色（E）：统一焦点态 + 卡片微动效 ---------- */
@@ -1678,6 +1702,8 @@ let view = "home";
 let searchQ = "";
 let todoBatch = false;              // 待办批量模式开关（内存态）
 const todoSel = new Set();          // 批量模式下被勾选的待办 id
+let finBatch = false;               // P0: 记账批量模式开关（内存态）
+const finSel = new Set();          // P0: 批量模式下被勾选的记账 id
 let pomo = { mode:"focus", running:false, remain:25*60, total:25*60 };   // 番茄钟状态（内存态，跨渲染保留；v2.0 支持专注/休息自动切换）
 let clockTimer = null;                                       // 全局秒级心跳（时钟 + 番茄钟）
 const EMPTY_HINTS={todo:"先把今天要做的 2-3 件事写下来，完成一条勾一条",checkin:"创建一个想坚持的小习惯，每天来打一次卡",read:"选一本书或一门课，从第一页开始推进",money:"记下第一笔收支，坚持一周就能看到趋势",note:"随手写下第一条想法、灵感或摘录"};
@@ -2290,17 +2316,39 @@ function renderModule(key){
     const prev=all.filter(x=>(x.date||"").startsWith(ymp)&&x.type==="expense").reduce((a,x)=>a+ +x.amount,0);
     const _d=prev?Math.round((exp-prev)/prev*100):null;
     const _dl=_d==null?"":'<span style="font-size:11px;font-weight:400;color:'+(_d>0?"var(--danger)":"var(--module-1)")+'">'+(_d>0?"↑":"↓")+Math.abs(_d)+'%</span>';
+    const _trfAll=all.filter(x=>(x.date||"").startsWith(ym));
+    const _trfExp=_trfAll.filter(x=>x.type==="transfer").reduce((a,x)=>a+ +x.amount,0);
+    const _trfTip=_trfExp>0?`<div style="font-size:11px;color:var(--text-tertiary);margin-top:6px">⇄ 本月转账 ¥${_trfExp} 不计入结余（仅收支影响结余）</div>`:'';
     head=`<div class="mod-summary">
       <div class="mini"><div class="l">收入</div><div class="v" style="color:var(--module-1)">¥${inc}</div></div>
       <div class="mini"><div class="l">支出</div><div class="v" style="color:var(--danger)">¥${exp}${_dl}</div></div>
       <div class="mini"><div class="l">结余</div><div class="v">¥${inc-exp}</div></div>
       <div class="mini"><div class="l">笔数</div><div class="v">${cur.length}<span style="font-size:11px;font-weight:400;color:var(--text-tertiary)"> 本月</span></div></div></div>
+      ${_trfTip}
       <div style="margin:4px 0 8px;padding:8px 12px;background:var(--surface-nested);border-radius:8px;display:flex;align-items:center;gap:8px;flex-wrap:wrap">
-        <span style="font-size:12px;font-weight:700;color:var(--text-secondary)">💰 月度预算</span>
-        <input type="number" id="bud-input" style="width:80px;padding:3px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface-card);color:var(--text)" value="${data.__budget&&data.__budget[ym]?data.__budget[ym]:''}" placeholder="设置预算">
+        <span style="font-size:12px;font-weight:700;color:var(--text-secondary)">💰 预算</span>
+        <span style="font-size:11px;color:var(--text-tertiary)">月</span>
+        <input type="number" id="bud-input" style="width:72px;padding:3px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface-card);color:var(--text)" value="${data.__budget&&data.__budget[ym]?data.__budget[ym]:''}" placeholder="月预算">
+        <span style="font-size:11px;color:var(--text-tertiary)">季</span>
+        <input type="number" id="bud-q" style="width:72px;padding:3px 8px;font-size:12px;border:1px solid var(--border);border-radius:6px;background:var(--surface-card);color:var(--text)" value="${data.__budgetQ&&data.__budgetQ[ym]?data.__budgetQ[ym]:''}" placeholder="季预算">
         <button class="bud-save" id="bud-save" style="padding:3px 10px;font-size:11px;font-weight:700;background:var(--accent);color:var(--on-accent);border:none;border-radius:6px;cursor:pointer">保存</button>
-        ${data.__budget&&data.__budget[ym]?`<span style="font-size:11px;color:${exp>data.__budget[ym]?'var(--danger)':'var(--module-1)'}">已用 ¥${exp} / 预算 ¥${data.__budget[ym]}${exp>data.__budget[ym]?' ⚠️ 超支':''}</span>`:''}
+        ${data.__budget&&data.__budget[ym]?`<span style="font-size:11px;color:${exp>data.__budget[ym]?'var(--danger)':'var(--module-1)'}">已用 ¥${exp} / 月预算 ¥${data.__budget[ym]}${exp>data.__budget[ym]?' ⚠️ 超支':''}</span>`:''}
+        ${data.__budgetQ&&data.__budgetQ[ym]?`<span style="font-size:11px;color:${exp>data.__budgetQ[ym]?'var(--danger)':'var(--module-1)'}">季已用 ¥${exp} / 季预算 ¥${data.__budgetQ[ym]}</span>`:''}
       </div>`;
+    if(finBatch){
+      head+=`<div class="batch-bar" id="fbb">
+        <button class="btn ghost" id="fbsel-all">${finSel.size===all.length&&all.length?'取消全选':'全选'}</button>
+        <button class="btn danger" id="fbsel-del">${icon("trash",14)}批量删除</button>
+        <span class="batch-info" id="fbsel-info">已选 ${finSel.size} 笔</span>
+        <button class="btn ghost" id="fbsel-exit">退出批量</button></div>`;
+    }
+    if(finBatch){
+      head+=`<div class="batch-bar" id="fbb">
+        <button class="btn ghost" id="fbsel-all">${finSel.size===all.length&&all.length?'取消全选':'全选'}</button>
+        <button class="btn danger" id="fbsel-del">${icon("trash",14)}批量删除</button>
+        <span class="batch-info" id="fbsel-info">已选 ${finSel.size} 笔</span>
+        <button class="btn ghost" id="fbsel-exit">退出批量</button></div>`;
+    }
   } else if(m.type==="todo"){
     const done=all.filter(x=>x.done).length;
     head=headHero(m, `${done}/${all.length}`, "今日已完成");
@@ -2337,7 +2385,7 @@ function renderModule(key){
   $("#screen").innerHTML=`<div class="header"><div><h2>${m.name}</h2><p>${m.desc}</p></div><div class="spacer"></div><span class="date-chip">${icon("calendar",14)} ${dateStr()}</span></div>
     <div class="toolbar">
       <div class="search-box">${icon("search",15,2.2)}<input id="search" placeholder="本模块内搜索…" value="${attr(searchQ)}"/></div>
-      <div class="spacer"></div>${m.type==="finance"?`<button class="btn ghost" id="btn-dup" title="复制最近一条记录并新建，日期设为今天">${icon("copy",15,2.2)}复刻上一条</button>`:''}${m.type==="todo"?`<button class="btn ghost" id="btn-batch" title="批量勾选并完成/删除">${icon("list",15,2.2)}批量</button>`:''}<button class="btn" id="btn-new">${icon("plus",16,2.2)}新建</button></div>
+      <div class="spacer"></div>${m.type==="finance"?`<button class="btn ghost" id="btn-dup" title="复制最近一条记录并新建，日期设为今天">${icon("copy",15,2.2)}复刻上一条</button><button class="btn ghost" id="btn-fbatch" title="批量勾选并删除">${icon("list",15,2.2)}批量</button>`:''}${m.type==="todo"?`<button class="btn ghost" id="btn-batch" title="批量勾选并完成/删除">${icon("list",15,2.2)}批量</button>`:''}<button class="btn" id="btn-new">${icon("plus",16,2.2)}新建</button></div>
     ${head}
     <div class="mod-layout">
       <div class="mod-main">
@@ -2554,7 +2602,8 @@ function recHTML(m,x){
        <span class="rdate" style="margin-left:0;color:var(--text-secondary)">${x.current}/${x.target} ${x.unit||m.unit||''} · ${pct}%</span>
        ${dlBadge||hBadge?`<div class="meta-line">${dlBadge}${hBadge}</div>`:''}${x.note?`<div class="rnote">${esc(x.note)}</div>`:''}${subsBlock}${customBlock}</div></div></div>`; }
   if(m.type==="finance"){ const inc=x.type==="income"; const trf=x.type==="transfer";
-    return `<div class="rec ${layoutCls}">${acts}<div class="top" style="padding-right:60px">${thumb}<div class="body" data-edit="${x.id}">
+    const fchk=finBatch?`<div class="batch-chk js-fsel ${finSel.has(String(x.id))?'on':''}" data-id="${x.id}">${icon("check",13,2.6)}</div>`:'';
+    return `<div class="rec ${layoutCls}">${acts}<div class="top" style="padding-right:60px">${fchk}${thumb}<div class="body" data-edit="${x.id}">
       <span class="rname">${esc(x.title)}</span>
       ${trf?'<span class="badge" style="background:var(--accent-muted);color:var(--accent)">⇄ 转账</span>':`<span class="badge" style="background:var(--surface-nested);color:var(--text-secondary)">${esc(x.category||'其他')}</span>`}${x.recur?'<span class="badge" style="background:var(--surface-nested);color:var(--text-secondary)">🔄 '+(x.recur==='week'?'每周':(x.recur==='month'?'每月':'每年'))+'</span>':''}
       <span class="rdate">${x.date||''}</span>${customBlock}</div>
@@ -2682,12 +2731,45 @@ function wireModule(key){ const m=modOf(key);
       (data[key]=data[key]||[]).unshift(copy); persist(); renderModule(key);
       toast("已复刻「"+String(src.title||"记录").slice(0,18)+"」为今天的新记录");
     }; }
-  // v1.13.0: 月度预算保存
+  // P0-2: 记账批量操作（复用待办批量模式）
+  if(m.type==="finance"){
+    const fb=$("#btn-fbatch");
+    if(fb) fb.onclick=()=>{ finBatch=!finBatch; if(!finBatch) finSel.clear(); renderModule(key); };
+    if(finBatch){
+      const list=data[key]||[];
+      const refreshBar=()=>{ const info=$("#fbsel-info"); if(info) info.textContent=`已选 ${finSel.size} 笔`;
+        const all=$("#fbsel-all"); if(all) all.textContent=(finSel.size===list.length&&list.length)?'取消全选':'全选'; };
+      $("#screen").querySelectorAll(".js-fsel").forEach(el=>el.onclick=e=>{
+        e.stopPropagation(); const id=String(el.dataset.id);
+        finSel.has(id)?finSel.delete(id):finSel.add(id);
+        el.classList.toggle("on", finSel.has(id)); refreshBar();
+      });
+      const fall=$("#fbsel-all"); if(fall) fall.onclick=()=>{ if(finSel.size===list.length&&list.length) finSel.clear(); else list.forEach(x=>finSel.add(String(x.id))); renderModule(key); };
+      const fdel=$("#fbsel-del"); if(fdel) fdel.onclick=()=>{ if(!finSel.size){ toast("请先勾选要删除的记账记录"); return; }
+        if(!confirm(`确定删除已选的 ${finSel.size} 条记账记录？`)) return;
+        const ids=[...finSel]; ids.forEach(id=>{
+          const idx=list.findIndex(i=>String(i.id)===id); if(idx<0) return;
+          const item=list[idx]; list.splice(idx,1);
+          data.__trash=(data.__trash||[]); data.__trash.unshift(Object.assign({},item,{__module:key,__deletedAt:isoToday()}));
+          data.__tombstones=(data.__tombstones||[]); data.__tombstones.push({id:key+"::"+id,at:isoToday()});
+        });
+        if(data.__trash.length>200) data.__trash.length=200;
+        if(data.__tombstones.length>1000) data.__tombstones.splice(0,data.__tombstones.length-1000);
+        finSel.clear(); finBatch=false; persist(); render(); toast(`已删除 ${ids.length} 条记账`);
+      };
+      const fexit=$("#fbsel-exit"); if(fexit) fexit.onclick=()=>{ finSel.clear(); finBatch=false; renderModule(key); };
+    }
+  }
+  // v1.13.0: 月度预算保存 / P0: 多档预算（月 + 季）
   const bud=$("#bud-save");
-  if(bud) bud.onclick=()=>{ const v=parseFloat($("#bud-input").value);
+  if(bud) bud.onclick=()=>{
+    const v=parseFloat($("#bud-input").value); const vq=parseFloat($("#bud-q").value);
     data.__budget=data.__budget||{};
     if(v>0) data.__budget[ymOffset(0)]=v; else delete data.__budget[ymOffset(0)];
-    store.save(); renderModule(key); };
+    data.__budgetQ=data.__budgetQ||{};
+    if(vq>0) data.__budgetQ[ymOffset(0)]=vq; else delete data.__budgetQ[ymOffset(0)];
+    store.save(); renderModule(key);
+  };
   // v1.13.0: 标签筛选
   if(m.type==="note"){
     const allNotes=data[key]||[];
@@ -3949,7 +4031,7 @@ function mk2(k){ return {todo:"待办",money:"记账",note:"笔记",read:"阅读
 function csvExport(){
   const lines=[["模块","类型","标题","内容/备注","日期","金额","完成","进度","分类","标签"]];
   (data.todo||[]).forEach(x=>lines.push([mk2("todo"),"待办",x.title,x.note||"",x.date||"",x.done?"✓":"",x.repeat?("🔁"+x.repeat):""]));
-  (data.money||[]).forEach(x=>lines.push([mk2("money"),"记账",x.title||"",x.note||"",x.date||"",x.type==="income"?x.amount:-x.amount,"",x.category||"",""]));
+  (data.money||[]).forEach(x=>lines.push([mk2("money"),x.type==="transfer"?"转账":(x.type==="income"?"收入":"支出"),x.title||"",x.note||"",x.date||"",x.type==="expense"?-x.amount:(x.type==="transfer"?0:x.amount),"",x.category||"",x.recur?("🔁"+({week:"每周",month:"每月",year:"每年"})[x.recur]||""):""]));
   (data.note||[]).forEach(x=>lines.push([mk2("note"),"笔记",x.title||"",(x.content||"").slice(0,200),x.date||"","","","", (x.tags||[]).join("|")]));
   (data.read||[]).forEach(x=>lines.push([mk2("read"),"阅读",x.title||"",x.note||"",x.date||"",x.current||0,x.target||0,x.progress!=null?Math.round(x.progress)+"%":"",x.habitId?"🔗":"" ]));
   const csv=lines.map(r=>r.map(c=>'"'+String(c??"").replace(/"/g,'""')+'"').join(",")).join("\n");
@@ -3971,10 +4053,13 @@ function csvImport(f){
       lines.slice(1).forEach(l=>{
         const cells=l.match(/"((?:[^"]|"")*)"/g)||[];
         const get=col=>{ const i=idx[col]; if(i==null||i>=cells.length) return ""; return cells[i].replace(/^"|"$/g,"").replace(/""/g,'"'); };
-        const mod=get("模块"), title=get("标题"), date=get("日期"), amt=parseFloat(get("金额"))||0, note=get("内容/备注"), tag=get("标签");
+        const mod=get("模块"), typ=get("类型"), title=get("标题"), date=get("日期"), amt=parseFloat(get("金额"))||0, note=get("内容/备注"), tag=get("标签");
         const uid=()=>Date.now()+Math.floor(Math.random()*9999);
         if(mod==="待办"&&title){ data.todo=data.todo||[]; data.todo.push({id:uid(),title,done:!!get("完成"),date:date||isoToday(),note,ts:Date.now()}); cnt++; }
-        else if(mod==="记账"&&title){ data.money=data.money||[]; data.money.push({id:uid(),type:amt>0?"income":"expense",amount:Math.abs(amt),title,note,date:date||isoToday(),category:get("分类")||"日常",ts:Date.now()}); cnt++; }
+        else if(mod==="记账"&&title){
+          const t=typ==="收入"?"income":(typ==="转账"?"transfer":"expense");
+          data.money=data.money||[]; data.money.push({id:uid(),type:t,amount:Math.abs(amt),title,note,date:date||isoToday(),category:get("分类")||"日常",ts:Date.now()}); cnt++;
+        }
         else if(mod==="笔记"&&title){ data.note=data.note||[]; data.note.push({id:uid(),title,content:note,date:date||isoToday(),tags:tag?tag.split("|").map(s=>s.trim()).filter(Boolean):[],ts:Date.now()}); cnt++; }
       });
       store.save(); render(); toast("CSV 导入成功，新增 "+cnt+" 条记录");
@@ -4872,6 +4957,12 @@ sync.startAuto(); if(sync.on) sync.pull(true).then(function(){ if((sync.cfg().re
     if(o)o.addEventListener("click",function(e){if(e.target===o)hideGuide(true);});
     var first=false;try{first=!data.__onboarded;}catch(e){}
     if(first)setTimeout(showGuide,900);
+  }
+  /* P0-1: 键盘弹起/收起时，移动端隐藏/恢复底部 Tab 栏 */
+  if(window.visualViewport){
+    const vv=window.visualViewport;
+    const onKb=()=>{ const kbOpen=vv.height<window.innerHeight*.8; document.body.classList.toggle("kb-open",kbOpen); };
+    vv.addEventListener("resize",onKb); vv.addEventListener("scroll",onKb);
   }
   if(document.readyState==="loading")document.addEventListener("DOMContentLoaded",init);else init();
 })();
