@@ -130,6 +130,19 @@ http.createServer((req, res) => {
         json(res, 200, { ok: true });
       }).catch(e => json(res, 400, "bad body: " + e.message));
     }
+    if (action === "markread") {
+      // 把已读标记推回后端（避免另一台设备仍显示未读）
+      return readBody(req).then(body => {
+        const j = JSON.parse(body);
+        const msgId = j && j.msgId;
+        if (!msgId) throw new Error("need msgId");
+        const list = store.inbox[uid] || [];
+        const m2 = list.find(x => x.id === msgId);
+        if (m2) m2.read = true;
+        save();
+        json(res, 200, { ok: true });
+      }).catch(e => json(res, 400, "bad body: " + e.message));
+    }
     if (action === "remove") {
       return readBody(req).then(body => {
         const j = JSON.parse(body);

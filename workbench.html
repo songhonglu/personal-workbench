@@ -112,7 +112,8 @@
   .navi.active { background: var(--drawer-active); color: var(--drawer-text); font-weight: 700; }
   .navi svg { color: var(--drawer-text-mute); flex: 0 0 auto; }
   .navi.active svg { color: var(--drawer-text); }
-  .nav-sep { font-size: 10.5px; opacity: .42; padding: 15px 14px 6px; letter-spacing: .1em; }
+   .nav-sep { font-size: 10.5px; opacity: .42; padding: 15px 14px 6px; letter-spacing: .1em; }
+   .navi .nav-badge { margin-left:auto; min-width:20px; height:20px; padding:0 6px; border-radius:999px; background:var(--accent); color:#fff; font-size:11px; font-weight:700; display:flex; align-items:center; justify-content:center; line-height:1; }
   .sidebar .foot { padding: 15px 20px; font-size: 11px; opacity: .42; border-top: 1px solid var(--drawer-hover); }
   .foot-hint { margin-bottom: 10px; }
   .toast { position:fixed; left:50%; bottom:28px; transform:translateX(-50%) translateY(16px); background:var(--text); color:var(--page-bg); padding:10px 18px; border-radius:999px; font-size:13px; font-weight:600; box-shadow:var(--shadow-overlay); opacity:0; pointer-events:none; transition:opacity .2s, transform .2s; z-index:999; max-width:80vw; }
@@ -1691,7 +1692,7 @@ const storage = (() => {
      通过 store.useUserSlot(userId) 切换；wbFriends/wbUser 的其余
      存储键（wb-auth / wb-users / wb-friends / wb-inbox）在账号模式下
      也按 userId 命名空间隔离，不同账号互不可见。
-   • 好友（wbFriends）：同��览器的好友直接写对方本地收件箱；
+   • 好友（wbFriends）：同浏览器的好友直接写对方本地收件箱；
      跨设备走 sync 后端的 /api/friends、/api/inbox 端点（v2），
      未部署后端时优雅降级并明确提示。
    ============================================================ */
@@ -1759,11 +1760,56 @@ const wbUser = {
     this._write(this._authKey(), { username, userId:rec.userId, nickname:rec.nickname, ts:Date.now() });
     return {ok:true, rec};
   },
-  logout(){
-    this._erase(this._authKey());
-  },
-  switchTo(userId){
-    /* 切换账号：登出当前 → 找到目标账号的 auth → 写当�� auth（临时借道 cur()）
+   logout(){
+     this._erase(this._authKey());
+   },
+   /* v1.18.0 修改密码：校验旧密码 → 更新注册表散列 → 同步当前 auth 的 ts */
+   changePassword(oldPw, newPw){
+     const c=this.cur();
+     if(!c) return {ok:false, err:"请先登录账号"};
+     const reg=this._read(USERS_KEY)||{};
+     const rec=reg[c.username];
+     if(!rec) return {ok:false, err:"当前账号不在本机注册表中"};
+     if(rec.passHash!==wbHash(c.username+"::"+oldPw)) return {ok:false, err:"旧密码错误"};
+     if(!newPw || String(newPw).length<4) return {ok:false, err:"新密码至少 4 位"};
+     rec.passHash=wbHash(c.username+"::"+newPw); rec.ts=Date.now();
+     this._write(USERS_KEY, reg);
+     this._write(this._authKey(), { username:c.username, userId:c.userId, nickname:c.nickname, ts:Date.now() });
+     return {ok:true};
+   },
+   /* v1.18.0 一键清除本机账号数据：删当前账号的 数据槽/好友表/收件箱/注册表项/auth
+      （不影响其他账号；不可恢复，需登录态） */
+   clearAccountData(){
+     const c=this.cur();
+     if(!c) return {ok:false, err:"请先登录账号"};
+     const uid=c.userId;
+     /* 1. 当前账号数据槽（workbench-v1::user::{uid}）及该槽的自动备份 */
+     this._erase(CONFIG.storageKey+"::user::"+uid);
+     try{
+       const bakIdx=this._read(CONFIG.storageKey+"::user::"+uid+"::bakIdx");
+       if(bakIdx&&Array.isArray(bakIdx)){ bakIdx.forEach(d=>this._erase(CONFIG.storageKey+"::user::"+uid+"::bak::"+d)); }
+     }catch(_e){}
+     /* 2. 好友表 / 收件箱（含"匿名"命名空间里涉及该账号的镜像条目） */
+     ["::user::"+uid].forEach(ns=>{ this._erase(FRIENDS_KEY+ns); this._erase(INBOX_KEY+ns); });
+     /* 3. 本机其他账号好友表 / 收件箱里的对端残留（同浏览器回写镜像） */
+     const known=this.known();
+     known.forEach(k=>{
+       if(k.userId===uid) return;
+       const fk=FRIENDS_KEY+"::user::"+k.userId; const f=this._read(fk)||{};
+       if(f[uid]){ delete f[uid]; this._write(fk,f); }
+       const ik=INBOX_KEY+"::user::"+k.userId; const im=this._read(ik)||{};
+       if(im[uid]){ delete im[uid]; this._write(ik,im); }
+     });
+     /* 4. 注册表项 */
+     const reg=this._read(USERS_KEY)||{};
+     if(reg[c.username]){ delete reg[c.username]; this._write(USERS_KEY, reg); }
+     /* 5. auth（含命名空间 auth） */
+     this._erase(this._authKey());
+     this._erase(AUTH_KEY+"::user::"+uid);
+     return {ok:true};
+   },
+   switchTo(userId){
+    /* 切换账号：登出当前 → 找到目标账号的 auth → 写当前 auth（临时借道 cur()）
        实际加载数据槽在 boot 完成前手动用 loadUserSlot 处理 */
     const target=(this.known().find(x=>x.userId===userId));
     if(!target) return false;
@@ -1890,7 +1936,7 @@ const store = {
            try{ bak.save(s); }catch(_e){}
            return;
          }
-       }catch(_e){/* 多���间结构写入失败，退化为直接写当前数据 */}
+       }catch(_e){/* 多空间结构写入失败，退化为直接写当前数据 */}
        storage.setItem(SLOT_KEY, s);
        try{ bak.save(s); }catch(_e){}
      }catch(e){ toast("存储空间已满，请导出备份后清理"); console.error("[store] saveLocal:", e); }
@@ -2020,7 +2066,14 @@ const wbFriends = {
   _write(key, v){ try{ storage.setItem(key, JSON.stringify(v)); }catch(e){} },
   me(){ const c=wbUser.cur(); return c ? { userId:c.userId, nickname:c.nickname } : { userId:"anon", nickname:"本机未登录用户" }; },
   /* 我的好友列表 */
-  list(){ return Object.values(this._read(this._fKey())||{}); },
+   list(){ return Object.values(this._read(this._fKey())||{}); },
+   /* v1.18.0 最近互动时间：取该好友 userId 发给我消息的最新 sentAt（无互动为 null） */
+   lastInteraction(userId){
+     const b=this.inbox().filter(m=>m.from===userId);
+     if(!b.length) return null;
+     let t=0; b.forEach(m=>{ if(m.sentAt>t) t=m.sentAt; });
+     return t;
+   },
   addFriend(friend){
     /* friend = { userId, nickname } */
     if(!friend || !friend.userId) return {ok:false, err:"缺少好友信息"};
@@ -2099,6 +2152,101 @@ const wbFriends = {
     const item={ id:Date.now()+Math.floor(Math.random()*999), type:"alarm", title:(msg.text||"来自 "+(msg.fromName||"好友")), time:t.time||"09:00", repeat:t.repeat||"daily", quick:0, enabled:true, ts:Date.now(), group:"好友" };
     data.remind=data.remind||[]; data.remind.unshift(item); store.saveLocal(); return item;
   },
+  /* v1.18.0 全部已读：本账号收件箱所有消息一次性标记已读 */
+  clearAllRead(){
+    const iMap=this._read(this._iKey())||{};
+    const b=iMap[this._uid()]||[];
+    b.forEach(m=>{ if(!m.read) m.read=true; });
+    iMap[this._uid()]=b; this._write(this._iKey(), iMap);
+    /* 跨设备：逐条推已读标记（best-effort） */
+    if(sync.on){
+      const unread=b.filter(m=>m.read).slice(0,50);
+      unread.forEach(m=>{ fetch(sync._apiBase()+"/api/friends/"+encodeURIComponent(this._uid())+"/markread", { method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer "+(sync.cfg().token||"")}, body:JSON.stringify({ msgId:m.id }) }).catch(()=>{}); });
+    }
+  },
+  /* v1.18.0 好友活跃度排行：按好友 userId 聚合我收到的消息条数 */
+  activityRank(){
+    const inbox=this.inbox();
+    const map={};
+    inbox.forEach(m=>{ if(m.from&&m.from!==this._uid()){ map[m.from]=map[m.from]||0; map[m.from]++; } });
+    return Object.keys(map).map(uid=>({ userId:uid, count:map[uid] }))
+      .sort((a,b)=>b.count-a.count);
+  },
+  /* v1.18.0 我的「好友贡献」：统计由好友消息转入的待办 / 提醒数与占比 */
+  friendContribution(){
+    const todoFriend=(data.todo||[]).filter(t=>t&&t.note&&t.note.indexOf("来自好友")===0).length;
+    const todoAll=(data.todo||[]).length;
+    const remFriend=(data.remind||[]).filter(r=>r&&r.group==="好友").length;
+    const remAll=(data.remind||[]).length;
+    return { todoFriend, todoAll, remFriend, remAll,
+      todoPct: todoAll? Math.round(todoFriend/todoAll*100) : 0,
+      remPct: remAll? Math.round(remFriend/remAll*100) : 0 };
+  },
+  /* v1.18.0 分享扩展：把「记账单 / 笔记 / 习惯打卡」整条记录快照发给好友
+     （type: "money"|"note"|"habit"，payload 带源记录 id 与快照字段） */
+  shareRecord(toUserId, kind, sourceRec, text){
+    const payload={ sourceId: sourceRec&&sourceRec.id, kind };
+    if(kind==="money"){
+      payload.title=(sourceRec&&sourceRec.title)||"记账";
+      payload.amount=+(sourceRec&&sourceRec.amount||0);
+      payload.type=sourceRec.type||"expense";
+      payload.category=sourceRec.category||"";
+      payload.date=sourceRec.date||isoToday();
+      payload.rec=sourceRec;
+    } else if(kind==="note"){
+      payload.title=(sourceRec&&sourceRec.title)||"笔记";
+      payload.body=(sourceRec&&(sourceRec.body||sourceRec.content||"")).slice(0,2000);
+      payload.tags=sourceRec.tags||[];
+      payload.mood=sourceRec.mood||"";
+      payload.rec=sourceRec;
+    } else if(kind==="habit"){
+      payload.title=(sourceRec&&sourceRec.title)||"习惯打卡";
+      payload.goal=sourceRec.goal; payload.unit=sourceRec.unit;
+      payload.todayVal=sourceRec.log&&sourceRec.log[isoToday()];
+      payload.rec=sourceRec;
+    }
+    const label={ money:"记账", note:"笔记", habit:"习惯打卡" }[kind]||kind;
+    return this.send(toUserId, kind, payload, text||("好友 "+this.me().nickname+" 分享了"+label));
+  },
+  /* 从收件箱消息生成记账条目（type:"money"） */
+  toMoney(msg){
+    const t=msg.payload||{};
+    const src=t.rec||{};
+    const item={ id:Date.now()+Math.floor(Math.random()*999), title:src.title||t.title||"好友分享的记账", type:src.type||t.type||"expense", amount:+(src.amount!=null?src.amount:(t.amount||0)), category:src.category||t.category||"其他", date:src.date||t.date||isoToday(), ts:Date.now(), note:"来自好友 "+(msg.fromName||"") };
+    data.money=data.money||[]; data.money.unshift(item); store.saveLocal(); return item;
+  },
+  /* 从收件箱消息生成笔记（type:"note"） */
+  toNote(msg){
+    const t=msg.payload||{};
+    const src=t.rec||{};
+    const item={ id:Date.now()+Math.floor(Math.random()*999), title:src.title||t.title||"好友分享的笔记", body:src.body||t.body||msg.text||"", tags:(src.tags&&src.tags.length?src.tags:(t.tags||[])).slice(0,8), mood:src.mood||t.mood||"", ts:Date.now(), date:isoToday(), note:"来自好友 "+(msg.fromName||"") };
+    data.note=data.note||[]; data.note.unshift(item); store.saveLocal(); return item;
+  },
+  /* 从收件箱消息生成习惯打卡条目（type:"habit"，保留今日值便于对照） */
+  toHabit(msg){
+    const t=msg.payload||{};
+    const src=t.rec||{};
+    const item={ id:Date.now()+Math.floor(Math.random()*999), title:src.title||t.title||"好友分享的习惯", goal:src.goal, unit:src.unit||"", log:{}, ts:Date.now(), note:"来自好友 "+(msg.fromName||"") };
+    data.checkin=data.checkin||[]; data.checkin.unshift(item); store.saveLocal(); return item;
+  },
+  /* v1.18.0 提醒协同：接收方对好友的提醒做出回应（同意 / 拒绝 / 延期到某日）
+     status: "accept"|"decline"|"defer"，payload.date 为延期目标日（yyyy-mm-dd） */
+  respond(msg, status, newDate){
+    const me=this._uid();
+    const respondMsg={ id:wbUid("rsp"), from:me, to:msg.from, fromName:this.me().nickname, type:"respond",
+      refId:msg.id, status, payload:{ date:newDate||"" }, text:(msg.text||"").slice(0,40),
+      sentAt:Date.now(), read:false, source:"friend" };
+    /* 本账号收件箱里把原消息标记"已回应"（本地状态） */
+    const iMap=this._read(this._iKey())||{};
+    const b=iMap[me]||[];
+    const origin=b.find(x=>x.id===msg.id);
+    if(origin){ origin.responded=status; origin.respondTo=newDate||null; }
+    iMap[me]=b; this._write(this._iKey(), iMap);
+    /* 把回应发给原发送方（原发送方收件箱 / 后端） */
+    const r=this.send(msg.from, "respond", { refId:msg.id, status, date:newDate||"" },
+      { accept:"我收到了，会按期完成", decline:"这次先不安排", defer:"延期到 "+(newDate||"新日期") }[status]||status);
+    return r;
+  },
 };
 /* 后端 v2 轮询拉取跨设备 inbox（未部署后端时无副作用） */
 (async function syncFriendsInbox(){
@@ -2112,7 +2260,7 @@ const wbFriends = {
     const local=new Set(wbFriends.inbox().map(m=>m.id));
     let added=0;
     remote.forEach(m=>{ if(!local.has(m.id)){ const iMap=wbFriends._read(wbFriends._iKey())||{}; const b=iMap[wbFriends._uid()]||(iMap[wbFriends._uid()]=[]); b.unshift(m); wbFriends._write(wbFriends._iKey(), iMap); added++; } });
-    if(added){ render(); toast("收��� "+added+" 条来自好友的消息"); }
+    if(added){ render(); toast("收到 "+added+" 条来自好友的消息"); }
   }catch(e){/* 后端不可用则静默 */}
 })();
 
@@ -2177,7 +2325,7 @@ const spaceManager = {
       if(!raw) return [{id:"default",name:"默认空间"}];
       const all=JSON.parse(raw);
       if(!all.__spaces||!all.__activeSpace) return [{id:"default",name:"默认空间"}];
-      const out=[{id:"default",name:all.__spaces["default"]&&all.__spaces["default"].__spaceName?"默认空间（"+all.__spaces["default"].__spaceName+"）":"默认��间"}];
+      const out=[{id:"default",name:all.__spaces["default"]&&all.__spaces["default"].__spaceName?"默认空间（"+all.__spaces["default"].__spaceName+"）":"默认空间"}];
       for(const id of Object.keys(all.__spaces)){
         if(id==="default") continue;
         const sp=all.__spaces[id];
@@ -3818,11 +3966,12 @@ function remTick(){
 }
 
 /* ---------- 更新日志 ---------- */
-const APP_VERSION="1.17.1";
+const APP_VERSION="1.18.0";
 const CHANGELOG=[
+  {v:"1.18.0",date:"2026-10-01",title:"好友系统增强 · 账号安全 · 统计面板",fixes:["好友关系治理：好友列表展示 @userId 与最近互动时间，未读 badge 挂「账号与好友」导航入口，移除好友入口接前端 + 跨设备 remove 端点","收件箱增强：全部已读（clearAllRead）+ 按好友 / 按类型过滤（todo/remind/money/note/habit/respond 六类）","账号安全：修改密码（校验旧密码 → 更新 FNV-1a 散列）+ 一键清除本机账号数据（数据槽/好友表/收件箱/注册项，不影响其他账号）","分享扩展：记账 / 笔记 / 习惯打卡 整条记录快照分享（type: money/note/habit，payload 带源记录 id 与快照字段）","提醒协同：接收方同意 / 拒绝 / 延期反向回传（respond type 回写原消息 responded 状态 + 新消息发给原发送方）","统计面板：好友活跃度排行（按消息数 Top10）+ 我的好友贡献占比（待办/提醒来自好友的比例条形图）","修复 renderSystemCfg 重复卡片（sys-enc / sys-space-list / sys-space-new 双份 DOM id）与 24 处乱码字符","质检门禁：node _test_smoke.js 全绿 + workbench.html 全部 script 块 new Function 编译通过 + 顶层重复声明扫描"]},
   {v:"1.17.1",date:"2026-10-01",title:"多用户体系修补版 · 好友消息通道健壮性",fixes:["wbFriends.send 清理：移除冗余 iMap 读取与未用变量，同浏览器/跨设备路径注释规范","wbFriends.removeFriend 补齐跨设备端点：启用同步后端时 POST /api/friends/{me}/remove 解除服务端好友关系（best-effort 不阻塞本地）","APP_VERSION 同步 1.17.0 → 1.17.1，CHANGELOG 与 v1.17.0 文档对齐（FNV-1a 本地哈希实现说明）"]},
   {v:"1.17.0",date:"2026-10-01",title:"多用户体系 · 好友系统 · 跨设备消息通道",fixes:["账号体系：注册/登录/登出，密码本地 SHA-256+盐哈希存储，数据按 userId 命名空间完全隔离（未登录行为与旧版完全一致）","好友系统：双向好友关系，好友间发送待办/提醒，同浏览器零依赖直接用，跨设备走 sync-server v2 端点","收件箱：「来自好友」未读横幅 + 一键转入我的待办/提醒，已读状态跨设备同步","sync-server v2：新增 /api/friends 好友图 + 收件箱端点（send/inbox/add/remove/markread），保留原 /data 多端同步协议","质检门禁强化：冒烟测试新增 27 条多用户全链路断言 + 顶层重复声明静态扫描，78 PASS / 0 FAIL","修复：wbUser.cur() 循环调用栈溢出、wbFriends.markRead 逻辑 bug、前后端消息协议对齐"]},
-  {v:"1.16.0",date:"2026-10-01",title:"多空间管理 · 场景预设模板 · 换肤增强",fixes:["多空间管理：支持创建独立数据空间（多账��/多门店/多场景），互不干扰","场景���设模板：零售多门店/政务多账号/直播排班/库存管理 4 套预设，一键启用","换肤增强：新增 Indigo 冷蓝 / Sage 灰绿 2 套色板，共 6 套","番茄钟自定义：支持手动输入任意专注/休息时长（5-120 分钟）"]},
+  {v:"1.16.0",date:"2026-10-01",title:"多空间管理 · 场景预设模板 · 换肤增强",fixes:["多空间管理：支持创建独立数据空间（多账号/多门店/多场景），互不干扰","场景预设模板：零售多门店/政务多账号/直播排班/库存管理 4 套预设，一键启用","换肤增强：新增 Indigo 冷蓝 / Sage 灰绿 2 套色板，共 6 套","番茄钟自定义：支持手动输入任意专注/休息时长（5-120 分钟）"]},
   {v:"1.15.0",date:"2026-09-30",title:"根治清缓存后仍空白·旧 Service Worker 缓存",fixes:["根因：浏览器 PWA Service Worker 旧缓存（Cache Storage，独立于 localStorage）冻结着 v1.13 旧页面，且 controllerchange 自动 reload 死循环让 v1.14 兜底代码从未被执行","sw.js 缓存名升级到 wb-v2.1.0，activate 时自动清除所有旧 wb-* 历史缓存","HTML 请求严格 network-first：联网永远拿最新页面，仅断网回退缓存，从机制上杜绝设备停留在旧版代码","删除孤儿 DOM 绑定：#btnBak 按钮早已移除但代码仍做 null.onclick 赋值，异常会中断整个主脚本","清理 sync 对象中 forcePush/forcePull 的重复定义","数据管理页新增「清除旧 Service Worker 缓存」按钮，可一键清除浏览器里冻结的旧版页面","修复首页运动目标瓦片指向不存在的 sport 模块，改为 read 阅读目标"]},
   {v:"1.14.0",date:"2026-09-30",title:"空白页根治·启动崩溃兜底",fixes:["store.load 不再静默吞掉损坏/非对象数据，解析失败或 JSON 非对象时回退 seed 并告警","ensureV2 归一化所有模块字段，被污染成非数组（字符串/对象/null）不再导致 filter/forEach 崩溃","renderModule 未知模块 key 降级到首页，不再 TypeError 静默空白","启动序列包 try/catch 兜底：任何启动异常显示可读故障卡片 + 一键重试/重置，不再整页空白","新增 window 级未捕获异常兜底，后续异步/事件崩溃不再静默"]},
   {v:"1.13.0",date:"2026-09-30",title:"日历视图·番茄变体·统计图表·提醒增强",fixes:["日历视图：月历网格+事件点+节假日叠加+日详情","番茄工作法变体：经典/短频/深度/中长 4 种预设一键切换","统计图表：雷达图（6维习惯）+ 直方图（支出分布）","提醒增强：每周/每月重复、14天提前提醒、时区感知匹配","目标拆解：子任务自动推进进度条","成就系统：7 类徽章动态解锁","自定义仪表盘：模块 tile 可见性开关","Markdown 笔记：标题/列表/代码块/引用/链接渲染"]},
@@ -3986,7 +4135,7 @@ function renderCalendar(){
 
 /* ---------- router / sidebar ---------- */
 function dateStr(){ const n=new Date(); const wd="日一二三四五六"[n.getDay()]; return `${n.getFullYear()}年${n.getMonth()+1}月${n.getDate()}日 周${wd}`; }
-function go(v){ view=v; searchQ=""; renderNavActive(); render(); window.scrollTo({top:0}); }
+function go(v){ view=v; searchQ=""; renderNavActive(); render(); updateNavBadges(); window.scrollTo({top:0}); }
 function render(){ if(view==="home") renderHome(); else if(view==="insight") renderInsight(); else if(view==="trash") renderTrash(); else if(view==="remind") renderRemind(); else if(view==="focus") renderFocus(); else if(view==="profile") renderProfile(); else if(view==="changelog") renderChangelog(); else if(view==="mood") renderMood(); else if(view==="health") renderHealth(); else if(view==="timeline") renderTimeline(); else if(view==="calendar") renderCalendar(); else if(view==="system") renderSystemCfg(); else if(view==="friends") renderFriends(); else renderModule(view); }
 
 function buildNav(){
@@ -3999,6 +4148,17 @@ function buildNav(){
   $("#nav").querySelectorAll("[data-go]").forEach(el=>el.onclick=()=>{go(el.dataset.go); closeMobDrawer();});
   renderNavActive();
   buildMobNav();
+  updateNavBadges();
+}
+/* v1.18.0 侧栏 badge：未读好友消息数挂「账号与好友」入口 */
+function updateNavBadges(){
+  $("#nav").querySelectorAll(".navi[data-go='friends'] .nav-badge").forEach(b=>b.remove());
+  let n=0;
+  try{ n=wbFriends.unread().length; }catch(_e){ n=0; }
+  if(n>0){
+    const t=$("#nav").querySelector(".navi[data-go='friends']");
+    if(t){ const b=document.createElement("span"); b.className="nav-badge"; b.textContent=n>99?"99+":n; t.appendChild(b); }
+  }
 }
 function renderNavActive(){ $("#nav").querySelectorAll(".navi").forEach(el=>el.classList.toggle("active", el.dataset.go===view)); renderMobNavActive(); }
 
@@ -4769,40 +4929,18 @@ function renderSystemCfg(){
           </button>`).join("")}
       </div>
       <div class="sub" style="font-size:11px;color:var(--text-tertiary)">应用模板会向当前空间的模块追加预设数据，不会覆盖已有内容。</div>
-    </div>
     <div class="side-card" style="margin:0">
-      <div class="sh">${icon("lock",15)} 敏感数据加密</div>
-      <div class="sub" style="margin:6px 0 12px">开启后，金额、邮箱等敏感字段在落盘前做 XOR 混淆，防止直接读取 localStorage 暴露明文。</div>
-      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary)">
-        <input type="checkbox" id="sys-enc" ${data.__encOn?"checked":""} style="width:18px;height:18px;cursor:pointer">
-        启用本地字段加密
-      </label>
-      <div class="sub" style="margin-top:6px">${data.__encOn?"已启用 · 密钥："+(data.__encKey||"wb-default"):"未启用"}</div>
+      <div class="sh">${icon("shield",15)} 账号安全</div>
+      <div class="sub" style="margin:6px 0 12px">修改当前账号密码，或一键清除本机该账号的全部数据（数据槽 / 好友表 / 收件箱 / 注册项）。</div>
+      ${wbUser.cur()?`
+        <div class="sub" style="margin-bottom:6px">当前登录 <b>${esc(wbUser.cur().nickname)}</b>（@${esc(wbUser.cur().username)}）</div>
+        <div style="display:flex;gap:8px;flex-wrap:wrap">
+          <button class="btn ghost" id="sys-chg-pw">修改密码</button>
+          <button class="btn ghost" id="sys-clear-acct" style="color:var(--danger,#c0392b)">清除本机账号数据</button>
+        </div>
+        <div class="sub" style="margin-top:8px;font-size:11px;color:var(--text-tertiary)">⚠️ 清除后不可恢复，建议先「导出备份」再操作。</div>
+      `:`<div class="sub">登录账号后可用。未登录时账号数据存于本机公共槽位。</div>`}
     </div>
-    <div class="side-card" style="margin:0">
-      <div class="sh">${icon("grid",15)} 数据空间管理</div>
-      <div class="sub" style="margin:6px 0 12px">多账号 / 多门店 / 多场景，每个空间数据完全独立、互不干扰。</div>
-      <div id="sys-space-list" style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px"></div>
-      <button class="btn" id="sys-space-new" style="font-size:13px;padding:8px 14px;width:100%">＋ 新建空间</button>
-      <div class="sub" style="margin-top:8px">当前：${data.__spaceName||"默认空间"}${data.__activeSpace&&data.__activeSpace!=="default"?' <span style="color:var(--accent);font-weight:600">（'+data.__activeSpace+'）</span>':''}</div>
-    </div>
-    <div class="side-card" style="margin:0">
-      <div class="sh">${icon("bolt",15)} 场景预设模板</div>
-      <div class="sub" style="margin:6px 0 12px">按行业一键预填模块数据与提醒规则，可选启用。应用到当前空间。</div>
-      <div style="display:flex;flex-direction:column;gap:6px;margin-bottom:10px">
-        ${[
-          {id:"retail",  emoji:"🏪", name:"零售多门店", desc:"门店打卡 + 出入库记账 + 班次提醒",   tpl:"retail"},
-          {id:"gov",     emoji:"🏛️", name:"政务多账号", desc:"审批待办 + 会议提醒 + 敏感数据加密", tpl:"gov"},
-          {id:"live",    emoji:"📺", name:"直播排班",  desc:"场次打卡 + 粉丝进度 + 脚本笔记",     tpl:"live"},
-          {id:"stock",   emoji:"📦", name:"库存管理",  desc:"出入库记账 + 保养周期 + 补货提醒",   tpl:"stock"},
-        ].map(t=>`
-          <button class="btn ghost js-tpl-apply" data-tpl="${t.tpl}" style="display:flex;align-items:center;gap:8px;width:100%;text-align:left;padding:9px 12px;font-size:13px">
-            <span style="font-size:16px">${t.emoji}</span>
-            <span style="flex:1"><b>${t.name}</b><br><span style="font-size:11.5px;color:var(--text-tertiary)">${t.desc}</span></span>
-            <span style="font-size:11px;color:var(--accent);font-weight:600">启用</span>
-          </button>`).join("")}
-      </div>
-      <div class="sub" style="font-size:11px;color:var(--text-tertiary)">应用模板会向当前空间的模块追加预设数据，不会覆盖已有内容。</div>
     </div>
   </div>`;
   $("#sys-export").onclick=exportData;
@@ -4813,6 +4951,24 @@ function renderSystemCfg(){
   $("#sys-csv-file").onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(f) csvImport(f); e.target.value=""; };
   $("#sys-bak").onclick=openBakPanel;
   $("#sys-sync").onclick=()=>sync.openPanel();
+  /* v1.18.0 账号安全：修改密码 + 一键清除本机账号数据 */
+  const chgPw=$("#sys-chg-pw");
+  if(chgPw) chgPw.onclick=()=>{
+    const oldPw=prompt("输入当前账号的旧密码："); if(oldPw==null) return;
+    const newPw=prompt("输入新密码（≥4 位）："); if(newPw==null) return;
+    const newPw2=prompt("再次输入新密码确认：");
+    if(newPw!==newPw2){ toast("两次输入不一致"); return; }
+    const r=wbUser.changePassword(oldPw, newPw);
+    if(!r.ok){ toast(r.err); return; }
+    toast("密码已修改"); renderSystemCfg();
+  };
+  const clearAcct=$("#sys-clear-acct");
+  if(clearAcct) clearAcct.onclick=()=>{
+    if(!confirm("即将清除本机当前账号的全部数据（数据槽 / 好友表 / 收件箱 / 注册项）。\n此操作不可恢复，是否继续？")) return;
+    const r=wbUser.clearAccountData();
+    if(!r.ok){ toast(r.err); return; }
+    store.reloadForAccount(); renderSystemCfg(); toast("已清除当前账号本机数据");
+  };
   if($("#sys-clearsw")) $("#sys-clearsw").onclick=function(){
     var cleared=[];
     var done=function(){ toast("已清除旧缓存（"+cleared.length+" 项），正在重新加载…"); setTimeout(function(){ location.reload(); }, 400); };
@@ -5005,30 +5161,87 @@ function renderFriends(){
       </div>
       <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:8px">
         <div class="sub" style="font-weight:600;margin-bottom:8px">好友（${friends.length}）</div>
-        ${friends.length?friends.map(f=>`
+         ${friends.length?friends.map(f=>{
+           const li=wbFriends.lastInteraction(f.userId);
+           return `
           <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface-nested);border-radius:8px;border:1px solid var(--border);margin-bottom:6px">
             <span style="width:28px;height:28px;border-radius:50%;background:var(--accent-muted);color:var(--accent-dark);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">${esc((f.nickname||f.userId).slice(0,1).toUpperCase())}</span>
-            <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.nickname||f.userId)}</div><div style="font-size:11px;color:var(--text-tertiary)">@${esc(f.userId)}</div></div>
+            <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.nickname||f.userId)}</div><div style="font-size:11px;color:var(--text-tertiary)">@${esc(f.userId)}${li?(" · 最近互动 "+new Date(li).toLocaleString("zh-CN",{hour12:false})):""}</div></div>
             <button class="v2-chip js-fr-send" data-fid="${esc(f.userId)}" style="font-size:12px;padding:5px 10px">发送</button>
+            <button class="v2-chip js-fr-share" data-fid="${esc(f.userId)}" style="font-size:12px;padding:5px 10px">分享</button>
             <button class="v2-chip js-fr-del" data-fid="${esc(f.userId)}" style="font-size:12px;padding:5px 10px;color:var(--text-tertiary)">移除</button>
-          </div>`).join(""):'<div class="sub">还没有好友。上方添加一位后即可互发待办 / 提醒。</div>'}
+          </div>`;
+        }).join(""):'<div class="sub">还没有好友。上方添加一位后即可互发待办 / 提醒。</div>'}
       </div>
     </div>
     <div class="v2-card">
       <div class="v2-card-h"><span class="tic">${icon("bell",16)}</span>来自好友 <span style="font-weight:400;font-size:11.5px;color:var(--text-tertiary);margin-left:6px">${unread.length?`（未读 ${unread.length}）`:"（全部已读）"}</span></div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+        <select id="fr-f-fr" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:7px;background:var(--surface-nested);color:var(--text)"><option value="">全部好友</option>${friends.map(f=>`<option value="${esc(f.userId)}">${esc(f.nickname||f.userId)}</option>`).join("")}</select>
+        <select id="fr-f-typ" style="font-size:12px;padding:4px 8px;border:1px solid var(--border);border-radius:7px;background:var(--surface-nested);color:var(--text)"><option value="">全部类型</option>${["todo","remind","money","note","habit","respond"].map(t=>`<option value="${t}">${{todo:"待办",remind:"提醒",money:"记账",note:"笔记",habit:"习惯打卡",respond:"回应"}[t]}</option>`).join("")}</select>
+        <button class="v2-chip js-fr-allread" style="font-size:12px;padding:4px 10px">全部已读</button>
+      </div>
       ${inbox.length?inbox.slice(0,30).map(m=>{
         const unread=m.read?"":"<span style='width:7px;height:7px;border-radius:50%;background:var(--accent);display:inline-block;margin-left:6px;vertical-align:middle'></span>";
-        const t=m.type==="todo"?"待办":"提醒";
-        return `<div style="padding:9px 10px;background:var(--surface-nested);border-radius:8px;border:1px solid ${m.read?"var(--border)":"var(--accent)"};margin-bottom:6px">
-          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><b style="font-size:13px">${esc(m.fromName||"好友")}</b><span style="font-size:11px;color:var(--text-tertiary)">${new Date(m.sentAt).toLocaleString("zh-CN",{hour12:false})}</span><span class="v2-chip" style="font-size:10.5px;padding:2px 7px;color:var(--accent);border-color:var(--accent)">${t}</span>${unread}</div>
+        const tlabel={todo:"待办",remind:"提醒",money:"记账",note:"笔记",habit:"习惯打卡",respond:"回应"}[m.type]||m.type;
+        /* 响应按钮（仅当原消息是 todo/remind 且尚未回应） */
+        const respBtns=(m.type==="todo"||m.type==="remind")&&!m.responded?`
+          <button class="v2-chip js-fr-accept" data-mid="${esc(m.id)}" style="font-size:11.5px;padding:4px 10px">同意</button>
+          <button class="v2-chip js-fr-decline" data-mid="${esc(m.id)}" style="font-size:11.5px;padding:4px 10px;color:var(--text-tertiary)">拒绝</button>
+          <button class="v2-chip js-fr-defer" data-mid="${esc(m.id)}" style="font-size:11.5px;padding:4px 10px">延期到…</button>`
+          : (m.responded?`<span class="v2-chip" style="font-size:10.5px;padding:2px 7px;color:var(--accent);border-color:var(--accent)">已回应：${{accept:"同意",decline:"拒绝",defer:"延期到 "+(m.respondTo||"新日期")}[m.responded]||m.responded}</span>`:"");
+        /* 按 type 的"加入"按钮 */
+        const addBtn = m.type==="todo"?`<button class="v2-chip js-fr-inbox-todo" data-mid="${esc(m.id)}" style="font-size:11.5px;padding:4px 10px">加入我的待办</button>`
+         : m.type==="remind"?`<button class="v2-chip js-fr-inbox-rem" data-mid="${esc(m.id)}" style="font-size:11.5px;padding:4px 10px">加入我的提醒</button>`
+         : m.type==="money"?`<button class="v2-chip js-fr-inbox-money" data-mid="${esc(m.id)}" style="font-size:11.5px;padding:4px 10px">加入我的记账</button>`
+         : m.type==="note"?`<button class="v2-chip js-fr-inbox-note" data-mid="${esc(m.id)}" style="font-size:11.5px;padding:4px 10px">加入我的笔记</button>`
+         : m.type==="habit"?`<button class="v2-chip js-fr-inbox-habit" data-mid="${esc(m.id)}" style="font-size:11.5px;padding:4px 10px">加入我的习惯</button>`
+         : "";
+        /* 回应消息的摘要展示 */
+        const respDetail=m.type==="respond"?(m.payload&&m.payload.status?("回应："+{accept:"同意",decline:"拒绝",defer:"延期到 "+(m.payload.date||"")}[m.payload.status]||m.payload.status):""):"";
+        return `<div data-fr-from="${esc(m.from||"")}" data-fr-type="${esc(m.type||"")}" style="padding:9px 10px;background:var(--surface-nested);border-radius:8px;border:1px solid ${m.read?"var(--border)":"var(--accent)"};margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><b style="font-size:13px">${esc(m.fromName||"好友")}</b><span style="font-size:11px;color:var(--text-tertiary)">${new Date(m.sentAt).toLocaleString("zh-CN",{hour12:false})}</span><span class="v2-chip" style="font-size:10.5px;padding:2px 7px;color:var(--accent);border-color:var(--accent)">${tlabel}</span>${respDetail?`<span style="font-size:11px;color:var(--text-tertiary)">${esc(respDetail)}</span>`:""}${unread}</div>
           <div style="font-size:13px;color:var(--text);margin-bottom:6px">${esc(m.text||"（无正文）")}</div>
           <div style="display:flex;gap:6px;flex-wrap:wrap">
-            ${m.type==="todo"?`<button class="v2-chip js-fr-inbox-todo" data-mid="${esc(m.id)}" style="font-size:11.5px;padding:4px 10px">加入我的待办</button>`:`<button class="v2-chip js-fr-inbox-rem" data-mid="${esc(m.id)}" style="font-size:11.5px;padding:4px 10px">加入我的提醒</button>`}
+            ${addBtn}
+            ${respBtns}
             ${!m.read?`<button class="v2-chip js-fr-inbox-read" data-mid="${esc(m.id)}" style="font-size:11.5px;padding:4px 10px;color:var(--text-tertiary)">标记已读</button>`:""}
           </div>
         </div>`;
-      }).join(""):'<div class="empty" style="padding:14px"><div>还没有来自好友的消息</div><div style="font-size:12px;color:var(--text-tertiary);margin-top:6px">好友给你发送待办 / 提醒后会出现在这里</div></div>'}
+      }).join(""):'<div class="empty" style="padding:14px"><div>还没有来自好友的消息</div><div style="font-size:12px;color:var(--text-tertiary);margin-top:6px">好友给你发送待办 / 提醒 / 记账 / 笔记 / 习惯打卡后会出现在这里</div></div>'}
     </div>
+    ${(()=>{
+      const rank=wbFriends.activityRank();
+      const contrib=wbFriends.friendContribution();
+      const fml=Object.fromEntries(friends.map(f=>[f.userId, f]));
+      return `<div style="display:grid;grid-template-columns:1.1fr 1fr;gap:16px;margin-top:16px">
+        <div class="v2-card">
+          <div class="v2-card-h"><span class="tic">${icon("chart",16)}</span>好友活跃度排行</div>
+          ${rank.length?rank.slice(0,10).map((r,i)=>{
+            const f=fml[r.userId];
+            return `<div style="display:flex;align-items:center;gap:10px;padding:7px 10px;background:var(--surface-nested);border-radius:8px;border:1px solid var(--border);margin-bottom:5px">
+              <span style="width:22px;height:22px;border-radius:50%;background:var(--accent);color:#fff;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700">${i+1}</span>
+              <span style="font-size:13px;font-weight:600;flex:1">${esc(f?(f.nickname||f.userId):r.userId)}</span>
+              <span style="font-size:12px;color:var(--text-tertiary)">${r.count} 条</span>
+            </div>`;
+          }).join(""):'<div class="sub">暂无好友消息记录，活跃度随互发消息自动累计。</div>'}
+        </div>
+        <div class="v2-card">
+          <div class="v2-card-h"><span class="tic">${icon("activity",16)}</span>我的好友贡献占比</div>
+          <div style="display:flex;flex-direction:column;gap:12px;padding:8px 4px">
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px"><span>待办来自好友</span><span style="color:var(--text-tertiary)">${contrib.todoFriend}/${contrib.todoAll} · ${contrib.todoPct}%</span></div>
+              <div style="height:8px;background:var(--surface-nested);border-radius:99px;overflow:hidden"><div style="width:${contrib.todoPct}%;height:100%;background:var(--accent);border-radius:99px"></div></div>
+            </div>
+            <div>
+              <div style="display:flex;justify-content:space-between;font-size:12.5px;margin-bottom:6px"><span>提醒来自好友</span><span style="color:var(--text-tertiary)">${contrib.remFriend}/${contrib.remAll} · ${contrib.remPct}%</span></div>
+              <div style="height:8px;background:var(--surface-nested);border-radius:99px;overflow:hidden"><div style="width:${contrib.remPct}%;height:100%;background:var(--accent);border-radius:99px"></div></div>
+            </div>
+            <div class="sub" style="font-size:11.5px;color:var(--text-tertiary)">占比 = 由好友消息一键转入的条目 ÷ 对应模块全部条目。</div>
+          </div>
+        </div>
+      </div>`;
+    })()}
   </div>`;
   /* ---- 事件绑定 ---- */
   const $s=$("#screen");
@@ -5080,9 +5293,72 @@ function renderFriends(){
     if(!r.ok){ toast(r.err); return; }
     toast("已发送给 "+(f? (f.nickname||f.userId):fid));
   });
+  /* v1.18.0 分享记录：记账 / 笔记 / 习惯打卡 整条记录快照发给好友 */
+  $s.querySelectorAll(".js-fr-share").forEach(b=>b.onclick=()=>{
+    const fid=b.dataset.fid;
+    const f=friends.find(x=>x.userId===fid);
+    const kind=prompt("分享哪种记录？输入：\n1 = 记账\n2 = 笔记\n3 = 习惯打卡","1");
+    if(!kind) return;
+    const kindMap={"1":"money","2":"note","3":"habit"};
+    const k=kindMap[kind];
+    if(!k){ toast("类型无效"); return; }
+    const list=k==="money"?(data.money||[]):k==="note"?(data.note||[]):(data.checkin||[]);
+    if(!list.length){ toast("暂无"+(k==="money"?"记账":k==="note"?"笔记":"习惯打卡")+"记录可分享"); return; }
+    const pick=prompt("分享第几条？（输入序号 1-"+list.length+"）","1");
+    if(!pick) return;
+    const idx=parseInt(pick,10)-1;
+    const rec=list[idx];
+    if(!rec){ toast("序号无效"); return; }
+    const r=wbFriends.shareRecord(fid, k, rec);
+    if(!r.ok){ toast(r.err); return; }
+    toast("已分享"+(k==="money"?"记账":k==="note"?"笔记":"习惯打卡")+"给 "+(f?(f.nickname||f.userId):fid));
+  });
   $s.querySelectorAll(".js-fr-inbox-todo").forEach(b=>b.onclick=()=>{ const m=inbox.find(x=>x.id===b.dataset.mid); if(m){ wbFriends.toTodo(m); wbFriends.markRead(m.id); go("todo"); toast("已加入今日计划"); } });
   $s.querySelectorAll(".js-fr-inbox-rem").forEach(b=>b.onclick=()=>{ const m=inbox.find(x=>x.id===b.dataset.mid); if(m){ wbFriends.toRemind(m); wbFriends.markRead(m.id); go("remind"); toast("已加入提醒中心"); } });
+  $s.querySelectorAll(".js-fr-inbox-money").forEach(b=>b.onclick=()=>{ const m=inbox.find(x=>x.id===b.dataset.mid); if(m){ wbFriends.toMoney(m); wbFriends.markRead(m.id); go("money"); toast("已加入记账"); } });
+  $s.querySelectorAll(".js-fr-inbox-note").forEach(b=>b.onclick=()=>{ const m=inbox.find(x=>x.id===b.dataset.mid); if(m){ wbFriends.toNote(m); wbFriends.markRead(m.id); go("note"); toast("已加入笔记"); } });
+  $s.querySelectorAll(".js-fr-inbox-habit").forEach(b=>b.onclick=()=>{ const m=inbox.find(x=>x.id===b.dataset.mid); if(m){ wbFriends.toHabit(m); wbFriends.markRead(m.id); go("checkin"); toast("已加入习惯"); } });
   $s.querySelectorAll(".js-fr-inbox-read").forEach(b=>b.onclick=()=>{ const m=inbox.find(x=>x.id===b.dataset.mid); if(m){ wbFriends.markRead(m.id); render(); } });
+  /* v1.18.0 全部已读 */
+  $s.querySelectorAll(".js-fr-allread").forEach(b=>b.onclick=()=>{
+    wbFriends.clearAllRead();
+    render();
+    toast("已全部标记已读");
+  });
+  /* v1.18.0 按好友 / 类型过滤（DOM 过滤，不影响 localStorage） */
+  const filterFrom=$("#fr-f-fr"), filterType=$("#fr-f-typ");
+  const applyFilter=()=>{
+    const fromVal=filterFrom?filterFrom.value:"";
+    const typVal=filterType?filterType.value:"";
+    $s.querySelectorAll("[data-fr-from]").forEach(el=>{
+      const showFrom=(!fromVal||el.dataset.frFrom===fromVal);
+      const showType=(!typVal||el.dataset.frType===typVal);
+      el.style.display=(showFrom&&showType)?"":"none";
+    });
+  };
+  if(filterFrom) filterFrom.onchange=applyFilter;
+  if(filterType) filterType.onchange=applyFilter;
+  /* v1.18.0 提醒协同：同意 / 拒绝 / 延期 */
+  $s.querySelectorAll(".js-fr-accept").forEach(b=>b.onclick=()=>{
+    const m=inbox.find(x=>x.id===b.dataset.mid);
+    if(m){ wbFriends.respond(m,"accept"); render(); toast("已同意，消息已回传"); }
+  });
+  $s.querySelectorAll(".js-fr-decline").forEach(b=>b.onclick=()=>{
+    const m=inbox.find(x=>x.id===b.dataset.mid);
+    if(m){
+      if(!confirm("确认拒绝这条提醒？")) return;
+      wbFriends.respond(m,"decline"); render(); toast("已拒绝，消息已回传");
+    }
+  });
+  $s.querySelectorAll(".js-fr-defer").forEach(b=>b.onclick=()=>{
+    const m=inbox.find(x=>x.id===b.dataset.mid);
+    if(m){
+      const d=prompt("延期到哪天？格式 YYYY-MM-DD：", isoToday());
+      if(!d) return;
+      wbFriends.respond(m,"defer", d);
+      render(); toast("已延期到 "+d+"，消息已回传");
+    }
+  });
 }
 
 /* ---------- 自动备份：每日滚动快照（v1.9.4，静默运行，零交互） ---------- */
@@ -5369,7 +5645,7 @@ function wbUid(prefix){ return prefix+"-"+Date.now().toString(36)+Math.random().
     function quickAdd(text){
       const t = today();
       const uid = () => Date.now() + Math.floor(Math.random()*1000);
-      // 记账：¥xx / 收入/支出 数��
+      // 记账：¥xx / 收入/支出 数量
       const mMoney = text.match(/^(?:支出|收入|收|支)?\s*¥?\s*(\d+(?:\.\d+)?)\s*(.*)$/);
       const isExpense = /支出|花了|消费|买了|消费|付了/.test(text);
       const isIncome = /收入|工资|赚了|奖金/.test(text);
@@ -5392,7 +5668,7 @@ function wbUid(prefix){ return prefix+"-"+Date.now().toString(36)+Math.random().
         store.save();
         return;
       }
-      // 阅读���读完/正在读/学到
+      // 阅读：读完/正在读/学到
       if (/读完|正在读|学到|书/.test(text)) {
         data.read = data.read || [];
         data.read.unshift({ id: uid(), title: text, progress: /读完/.test(text) ? 100 : 10, goal: 100, ts: Date.now(), date: t });
