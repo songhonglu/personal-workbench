@@ -1,0 +1,238 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>个人每日工作台 · 用户调查结果</title>
+<style>
+:root{
+  --page-bg:#f0f2f5; --surface-card:#fff; --surface-nested:#f6f7f9;
+  --border:#e3e6ea; --border-input:#d5d9e0;
+  --text:#1f2430; --text-secondary:#5b6472; --text-tertiary:#8b93a3;
+  --accent:#2c4a7c; --accent-muted:rgba(44,74,124,.12);
+  --on-accent:#fff; --module-1:#1e7d4f; --module-4:#9c3fa8; --danger:#c0392b;
+  --shadow-card:0 1px 3px rgba(20,28,40,.06); --radius-card:14px; --radius-tile:12px;
+}
+*{box-sizing:border-box}
+body{margin:0;background:var(--page-bg);color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI","PingFang SC","Microsoft YaHei",sans-serif;font-size:14px;line-height:1.6;-webkit-font-smoothing:antialiased}
+.wrap{max-width:1100px;margin:0 auto;padding:40px 24px 80px}
+h1{font-size:28px;letter-spacing:-.02em;margin:0 0 6px;font-weight:800}
+h2{font-size:20px;font-weight:800;margin:36px 0 14px;letter-spacing:-.01em}
+h2 .no{display:inline-grid;place-items:center;width:28px;height:28px;border-radius:8px;background:var(--accent);color:var(--on-accent);font-size:14px;margin-right:10px;vertical-align:middle}
+.sub{color:var(--text-secondary);margin:0 0 24px}
+.meta-chips{display:flex;flex-wrap:wrap;gap:8px;margin:18px 0 8px}
+.chip{background:var(--surface-card);border:1px solid var(--border);border-radius:999px;padding:5px 14px;font-size:12.5px;font-weight:600;color:var(--text-secondary);box-shadow:var(--shadow-card)}
+.chip b{color:var(--accent);font-weight:800}
+/* KPI */
+.kpis{display:grid;grid-template-columns:repeat(4,1fr);gap:14px;margin:12px 0}
+.kpi{background:var(--surface-card);border:1px solid var(--border);border-radius:var(--radius-card);padding:18px;box-shadow:var(--shadow-card)}
+.kpi .v{font-size:30px;font-weight:800;letter-spacing:-.02em;line-height:1.1}
+.kpi .v small{font-size:14px;font-weight:600;color:var(--text-secondary)}
+.kpi .l{font-size:12.5px;color:var(--text-tertiary);font-weight:600;margin-top:4px}
+.kpi .d{font-size:11.5px;margin-top:6px;color:var(--text-secondary)}
+.kpi.good .v{color:var(--module-1)} .kpi.warn .v{color:#b5771a}
+/* cards */
+.card{background:var(--surface-card);border:1px solid var(--border);border-radius:var(--radius-card);padding:20px 22px;box-shadow:var(--shadow-card);margin-bottom:18px}
+.card .ct{font-size:15px;font-weight:800;margin-bottom:4px}
+.card .cd{font-size:12.5px;color:var(--text-tertiary);margin-bottom:16px}
+/* bar */
+.bar-row{display:grid;grid-template-columns:96px 1fr 44px;align-items:center;gap:10px;margin:9px 0}
+.bar-row .lb{font-size:12.5px;font-weight:600;color:var(--text-secondary);text-align:right}
+.track{height:10px;background:var(--surface-nested);border-radius:99px;overflow:hidden}
+.track i{display:block;height:100%;background:var(--accent);border-radius:99px}
+.track.m i{background:var(--module-1)} .track.a i{background:var(--module-4)}
+.bar-row .vv{font-size:12px;font-weight:700;color:var(--text-secondary);font-variant-numeric:tabular-nums}
+/* two col */
+.cols{display:grid;grid-template-columns:1fr 1fr;gap:18px}
+/* concern list */
+.concern-list{display:flex;flex-direction:column;gap:9px}
+.cl-item{display:flex;align-items:center;gap:10px}
+.cl-item .rank{width:22px;height:22px;border-radius:6px;background:var(--accent-muted);color:var(--accent);font-size:11.5px;font-weight:800;display:grid;place-items:center}
+.cl-item .name{flex:1;font-size:13px;font-weight:600}
+.cl-item .track{flex:1}
+.cl-item .num{font-size:12.5px;font-weight:800;color:var(--text-secondary);min-width:34px;text-align:right}
+/* nps */
+.nps-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:12px;margin-top:14px}
+.nps-cell{border-radius:12px;padding:14px;text-align:center;border:1px solid var(--border)}
+.nps-cell .n{font-size:26px;font-weight:800}
+.nps-cell .t{font-size:12px;color:var(--text-secondary);font-weight:600;margin-top:2px}
+.nps-cell.p{background:rgba(30,125,79,.08);border-color:rgba(30,125,79,.25)} .nps-cell.p .n{color:var(--module-1)}
+.nps-cell.m{background:var(--surface-nested)} .nps-cell.m .n{color:var(--text-secondary)}
+.nps-cell.d{background:rgba(192,57,43,.08);border-color:rgba(192,57,43,.25)} .nps-cell.d .n{color:var(--danger)}
+/* table */
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th,td{text-align:left;padding:9px 10px;border-bottom:1px solid var(--border)}
+th{font-weight:800;color:var(--text-tertiary);font-size:11.5px;text-transform:uppercase;letter-spacing:.04em}
+td .dot{display:inline-block;width:8px;height:8px;border-radius:3px;margin-right:7px;vertical-align:middle}
+tr:hover td{background:var(--surface-nested)}
+/* quote */
+.quotes{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.q{background:var(--surface-nested);border-radius:10px;padding:14px 16px;border:1px solid var(--border)}
+.q p{margin:0 0 8px;font-size:13px;line-height:1.55}
+.q .who{font-size:11.5px;color:var(--text-tertiary);font-weight:600}
+.q .who b{color:var(--accent)}
+/* conclusion */
+.concl{border-left:3px solid var(--accent);background:var(--accent-muted);border-radius:0 12px 12px 0;padding:18px 22px}
+.concl ul{margin:0;padding-left:18px} .concl li{margin:7px 0;font-size:13.5px}
+.concl li b{color:var(--accent)}
+/* recommendation */
+.rec-list{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+.rec{display:flex;gap:12px;padding:14px 16px;border:1px solid var(--border);border-radius:12px;background:var(--surface-card)}
+.rec .pri{flex:0 0 auto;width:44px;height:44px;border-radius:10px;display:grid;place-items:center;font-weight:800;font-size:13px}
+.rec.p1 .pri{background:rgba(192,57,43,.12);color:var(--danger)}
+.rec.p2 .pri{background:rgba(181,119,26,.14);color:#b5771a}
+.rec.p3 .pri{background:var(--accent-muted);color:var(--accent)}
+.rec .rt{font-size:13.5px;font-weight:800}
+.rec .rd{font-size:12.5px;color:var(--text-secondary);margin-top:3px}
+footer{margin-top:40px;font-size:11.5px;color:var(--text-tertiary);text-align:center}
+@media (max-width:820px){ .kpis{grid-template-columns:1fr 1fr} .cols,.quotes,.rec-list{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<div class="wrap">
+  <h1>个人每日工作台 · 用户调查结果</h1>
+  <p class="sub">向 10 个行业共 50 位用户发放统一调查表，模拟其连续使用工作台 2 周后的真实反馈，汇总使用率、满意度���关注点、痛点与改进建议。</p>
+
+  <div class="meta-chips">
+    <span class="chip">样本 <b>50</b> 人</span>
+    <span class="chip"><b>10</b> 行业 × 5</span>
+    <span class="chip">平均使用 <b>13.0</b> 天</span>
+    <span class="chip">设备 桌面 <b>32</b> / 移动 <b>18</b></span>
+  </div>
+
+  <h2><span class="no">1</span>核心指标</h2>
+  <div class="kpis">
+    <div class="kpi good"><div class="v">4.43<small> /5</small></div><div class="l">整体满意度</div><div class="d">待办最高 4.53，记账偏低 3.86</div></div>
+    <div class="kpi good"><div class="v">50.0</div><div class="l">NPS 净推荐值</div><div class="d">推荐 25 · 中立 25 · 贬损 0</div></div>
+    <div class="kpi warn"><div class="v">68<small>%</small></div><div class="l">开启数据备份</div><div class="d">导出 23 · 同步 11 · 未开启 16</div></div>
+    <div class="kpi"><div class="v">8.48<small> /10</small></div><div class="l">平均 NPS 评分</div><div class="d">无贬损用户，推荐意愿强</div></div>
+  </div>
+
+  <h2><span class="no">2</span>功能使用率</h2>
+  <div class="cols">
+    <div class="card">
+      <div class="ct">五大模块 · 使用频率（1–5 分）</div>
+      <div class="cd">平均频率越高代表使用越高频；高频人数 = 该模块打分 ≥4 的人数</div>
+      <div class="bar-row"><span class="lb">待办</span><div class="track m"><i style="width:86%"></i></div><span class="vv">4.30</span></div>
+      <div class="bar-row"><span class="lb">随手记</span><div class="track m"><i style="width:76%"></i></div><span class="vv">3.78</span></div>
+      <div class="bar-row"><span class="lb">习惯打卡</span><div class="track m"><i style="width:67%"></i></div><span class="vv">3.34</span></div>
+      <div class="bar-row"><span class="lb">长期目标</span><div class="track m"><i style="width:67%"></i></div><span class="vv">3.34</span></div>
+      <div class="bar-row"><span class="lb">记账</span><div class="track m"><i style="width:54%"></i></div><span class="vv">2.72</span></div>
+      <div class="cd" style="margin:14px 0 0;color:var(--text-secondary)">待办高频 44 人 · 随手记 32 · 长期目标 21 · 习惯 20 · 记账 13</div>
+    </div>
+    <div class="card">
+      <div class="ct">增强功能 · 使用频率</div>
+      <div class="cd">本次新增能力的采用度，批量操作最被认可</div>
+      <div class="bar-row"><span class="lb">批量操作</span><div class="track a"><i style="width:82%"></i></div><span class="vv">4.10</span></div>
+      <div class="bar-row"><span class="lb">笔记转待办</span><div class="track a"><i style="width:68%"></i></div><span class="vv">3.42</span></div>
+      <div class="bar-row"><span class="lb">提醒静音</span><div class="track a"><i style="width:58%"></i></div><span class="vv">2.90</span></div>
+      <div class="bar-row"><span class="lb">复刻上一条</span><div class="track a"><i style="width:56%"></i></div><span class="vv">2.78</span></div>
+      <div class="bar-row"><span class="lb">转账类型</span><div class="track a"><i style="width:38%"></i></div><span class="vv">1.90</span></div>
+      <div class="cd" style="margin:14px 0 0;color:var(--text-secondary)">高频人数：批量 37 · 笔记转待办 26 · 提醒静音 16 · 复刻 12 · 转账 7</div>
+    </div>
+  </div>
+
+  <h2><span class="no">3</span>模块满意度</h2>
+  <div class="card">
+    <div class="cd">按 50 人求平均（1–5 分）</div>
+    <div class="bar-row"><span class="lb">待办</span><div class="track"><i style="width:90.6%"></i></div><span class="vv">4.53</span></div>
+    <div class="bar-row"><span class="lb">随手记</span><div class="track"><i style="width:85.4%"></i></div><span class="vv">4.27</span></div>
+    <div class="bar-row"><span class="lb">习惯打卡</span><div class="track"><i style="width:83.2%"></i></div><span class="vv">4.16</span></div>
+    <div class="bar-row"><span class="lb">长期目标</span><div class="track"><i style="width:82.8%"></i></div><span class="vv">4.14</span></div>
+    <div class="bar-row"><span class="lb">记账</span><div class="track"><i style="width:77.2%"></i></div><span class="vv">3.86</span></div>
+    <div class="cd" style="margin:14px 0 0;color:var(--text-secondary)">记账是满意度最低模块，也是改进优先级最高的方向</div>
+  </div>
+
+  <h2><span class="no">4</span>用户最关注的问题点</h2>
+  <div class="cols">
+    <div class="card">
+      <div class="ct">关注点 Top（多选）</div>
+      <div class="cd">用户最在意工作台哪方面，选项按提及人数排序</div>
+      <div class="concern-list">
+        <div class="cl-item"><span class="rank">1</span><span class="name">提醒</span><div class="track"><i style="width:100%"></i></div><span class="num">16</span></div>
+        <div class="cl-item"><span class="rank">2</span><span class="name">待办</span><div class="track"><i style="width:100%"></i></div><span class="num">16</span></div>
+        <div class="cl-item"><span class="rank">3</span><span class="name">效率</span><div class="track"><i style="width:81%"></i></div><span class="num">13</span></div>
+        <div class="cl-item"><span class="rank">4</span><span class="name">批量</span><div class="track"><i style="width:81%"></i></div><span class="num">13</span></div>
+        <div class="cl-item"><span class="rank">5</span><span class="name">长期目标</span><div class="track"><i style="width:69%"></i></div><span class="num">11</span></div>
+        <div class="cl-item"><span class="rank">6</span><span class="name">习惯养成</span><div class="track"><i style="width:50%"></i></div><span class="num">8</span></div>
+        <div class="cl-item"><span class="rank">7</span><span class="name">灵感记录</span><div class="track"><i style="width:50%"></i></div><span class="num">8</span></div>
+        <div class="cl-item"><span class="rank">8</span><span class="name">记账</span><div class="track"><i style="width:50%"></i></div><span class="num">8</span></div>
+      </div>
+    </div>
+    <div class="card">
+      <div class="ct">NPS 分布</div>
+      <div class="cd">10 分制：9–10 推荐 / 7–8 中立 / 0–6 贬损</div>
+      <div class="nps-grid">
+        <div class="nps-cell p"><div class="n">25</div><div class="t">推荐者 9–10</div></div>
+        <div class="nps-cell m"><div class="n">25</div><div class="t">中立者 7–8</div></div>
+        <div class="nps-cell d"><div class="n">0</div><div class="t">贬损者 0–6</div></div>
+      </div>
+      <div class="cd" style="margin:14px 0 0;color:var(--text-secondary)">净推荐值 (25−0)/50 ×100 = <b style="color:var(--module-1)">50</b>，整体口碑良好</div>
+    </div>
+  </div>
+
+  <h2><span class="no">5</span>行业 × 核心模块偏好</h2>
+  <div class="card">
+    <div class="cd">每个行业内使用频率最高（≥4）的两个模块，高频人数 / 行业样本 5</div>
+    <table>
+      <thead><tr><th>行业</th><th>核心模块 ①</th><th>核心模块 ②</th><th>差异化诉求</th></tr></thead>
+      <tbody>
+        <tr><td><span class="dot" style="background:var(--accent)"></span>研发</td><td>待办（4/5）</td><td>习惯打卡（3/5）</td><td>效率、专注计时、快捷键</td></tr>
+        <tr><td><span class="dot" style="background:var(--module-1)"></span>金融</td><td>记账（5/5）</td><td>待办（4/5）</td><td>转账、收支统计、数据准确</td></tr>
+        <tr><td><span class="dot" style="background:var(--module-4)"></span>教育</td><td>待办（5/5）</td><td>随手记（4/5）</td><td>阅读进度、排课、批量待办</td></tr>
+        <tr><td><span class="dot" style="background:var(--danger)"></span>医疗</td><td>待办（3/5）</td><td>习惯打卡（2/5）</td><td>值班提醒、提醒静音</td></tr>
+        <tr><td><span class="dot" style="background:#b5771a"></span>零售</td><td>待办（5/5）</td><td>记账（4/5）</td><td>批量操作、复刻记账、多门店</td></tr>
+        <tr><td><span class="dot" style="background:var(--module-4)"></span>设计</td><td>随手记（5/5）</td><td>待办（4/5）</td><td>视觉、主题、灵感素材</td></tr>
+        <tr><td><span class="dot" style="background:var(--accent)"></span>自媒体</td><td>待办（5/5）</td><td>随手记（4/5）</td><td>灵感转发布任务、选题</td></tr>
+        <tr><td><span class="dot" style="background:var(--module-1)"></span>制造</td><td>待办（5/5）</td><td>习惯打卡（2/5）</td><td>批量待办、保养提醒</td></tr>
+        <tr><td><span class="dot" style="background:var(--danger)"></span>政务</td><td>待办（4/5）</td><td>随手记（4/5）</td><td>数据安全、批量、归档</td></tr>
+        <tr><td><span class="dot" style="background:#b5771a"></span>学生</td><td>待办（5/5）</td><td>随手记（5/5）</td><td>习惯养成、专注、考试日程</td></tr>
+      </tbody>
+    </table>
+  </div>
+
+  <h2><span class="no">6</span>高频痛点</h2>
+  <div class="card">
+    <div class="cd">将 50 人自由填写的痛点归并到 6 类，按提及人数排序</div>
+    <div class="bar-row"><span class="lb">移动端体验</span><div class="track"><i style="width:100%"></i></div><span class="vv">7</span></div>
+    <div class="bar-row"><span class="lb">提醒能力</span><div class="track"><i style="width:86%"></i></div><span class="vv">6</span></div>
+    <div class="bar-row"><span class="lb">场景扩��</span><div class="track"><i style="width:86%"></i></div><span class="vv">6</span></div>
+    <div class="bar-row"><span class="lb">数据/同步</span><div class="track"><i style="width:71%"></i></div><span class="vv">5</span></div>
+    <div class="bar-row"><span class="lb">记账深化</span><div class="track"><i style="width:57%"></i></div><span class="vv">4</span></div>
+    <div class="bar-row"><span class="lb">操作/交互</span><div class="track"><i style="width:43%"></i></div><span class="vv">3</span></div>
+    <div class="cd" style="margin:14px 0 0;color:var(--text-secondary)">「移动端体验」与「提醒能力」是跨行业最高频痛点，应优先处理</div>
+  </div>
+
+  <h2><span class="no">7</span>典型原声</h2>
+  <div class="quotes">
+    <div class="q"><p>"批量删除待办太好用，希望记账也能批量。"</p><div class="who"><b>研发 · 测试</b> · NPS 10</div></div>
+    <div class="q"><p>"转账功能对我们很重要，但没计入结余要提醒一下。"</p><div class="who"><b>金融 · 分析师</b> · NPS 9</div></div>
+    <div class="q"><p>"灵感转待办太顺手，选题直接变成发布任务。"</p><div class="who"><b>自媒体 · 视频博主</b> · NPS 10</div></div>
+    <div class="q"><p>"手机上打卡很顺手，但底部 Tab 偶尔被导航遮挡。"</p><div class="who"><b>研发 · 前端</b> · NPS 10</div></div>
+    <div class="q"><p>"提醒静音救命，但希望能加到一周。"</p><div class="who"><b>医疗 · 急诊医生</b> · NPS 9</div></div>
+    <div class="q"><p>"批量完成很爽，目标+记账是绝配。"</p><div class="who"><b>金融 · 理财顾问</b> · NPS 10</div></div>
+  </div>
+
+  <h2><span class="no">8</span>结论与改进建议</h2>
+  <div class="concl" style="margin-bottom:18px">
+    <ul>
+      <li><b>待办是最强模块</b>：4.30 频率 + 4.53 满意度双第一，跨 10 行业普遍高频，应持续打磨批量与分组能力。</li>
+      <li><b>记账是最大短板</b>：满意度 3.86 最低，财务类用户诉求集中在转账计入、多档预算、批量与导出字段。</li>
+      <li><b>提醒能力是被最关注的问题点</b>（16 人次）：静音时长、分组、跨行业值班/排班场景需扩展。</li>
+      <li><b>移动端体验是最高频痛点</b>：底部遮挡、字号、键盘遮挡集中在移动设备用户（18/50）。</li>
+      <li><b>数据安全感待提升</b>：16/50 未开启备份/同步，政务/医疗用户有隐私加密诉求。</li>
+    </ul>
+  </div>
+  <div class="rec-list">
+    <div class="rec p1"><div class="pri">P0</div><div><div class="rt">移动端体验修复</div><div class="rd">底部 Tab 遮挡、输入框键盘弹起、字号层级；这是最高频痛点，直接影响 36% 移动用户</div></div></div>
+    <div class="rec p1"><div class="pri">P0</div><div><div class="rt">��账能力深化</div><div class="rd">转账计入结余提示、多档预算、批量记账、导出字段扩展，拉低分模块</div></div></div>
+    <div class="rec p2"><div class="pri">P1</div><div><div class="rt">提醒能力扩展</div><div class="rd">静音时长加到一周、按分组/值班场景、节假日联动，回应被最关注的诉求</div></div></div>
+    <div class="rec p2"><div class="pri">P1</div><div><div class="rt">数据备份引导 + 隐私</div><div class="rd">首启引导开启备份、政务/医疗场景可选本地加密，降低数据丢失风险</div></div></div>
+    <div class="rec p3"><div class="pri">P2</div><div><div class="rt">场景化扩展</div><div class="rd">多门店/多账号分空间、排期/排班/库存等长尾诉求，按行业定向迭代</div></div></div>
+    <div class="rec p3"><div class="pri">P2</div><div><div class="rt">换肤与素材增强</div><div class="rd">更多主题色板、笔记支持手绘/图片、番茄钟自定义分段，提升设计/创作类粘性</div></div></div>
+  </div>
+
+  <footer>样本 50 人 · 10 行业 × 5 · 数据为模拟调查 · 统计口径：使用频率 1–5，满意度 1–5，NPS 0–10 · 生成自 <code>_survey_stats.json</code></footer>
+</div>
+</body>
+</html>

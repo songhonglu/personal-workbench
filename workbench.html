@@ -1430,6 +1430,7 @@ const ICONS = {
   sheet:'<rect x="4" y="4" width="16" height="16" rx="2"/><path d="M4 9h16M4 14.5h16M9.5 4v16"/>',
   history:'<path d="M4.5 8A8 8 0 1 1 4 12.5"/><path d="M4.5 4v4h4"/><path d="M12 8v4l2.5 1.5"/>',
   link:'<path d="M9.5 14.5l5-5"/><path d="M8 12l-1.5 1.5a3.5 3.5 0 0 0 5 5L13 17"/><path d="M16 12l1.5-1.5a3.5 3.5 0 0 0-5-5L11 7"/>',
+  lock:'<rect x="5" y="11" width="14" height="9" rx="2.5"/><path d="M8 11V8a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1.2"/>',
 };
 function icon(name, size=22, sw=1.7){
   const path = ICONS[name] || ICONS.grid;
@@ -1533,13 +1534,37 @@ const storage = (() => {
 })();
 
 const store = {
-  load(){
+   load(){
     const raw = storage.getItem(CONFIG.storageKey);
     if(raw){
       try{
         const parsed = JSON.parse(raw);
         // 加固：解析结果必须是"纯对象"才可用；数组/字符串/null/数字/布尔一律视为损坏，走 seed 兜底
-        if(parsed && typeof parsed === "object" && !Array.isArray(parsed)) return parsed;
+        if(parsed && typeof parsed === "object" && !Array.isArray(parsed)){
+          // P1-2: 敏感字段本地解密 — 加载时还原 XOR 混淆字段
+          if(parsed.__encOn && parsed.__encKey){
+            try{
+              const keyStr=parsed.__encKey;
+              const decVal=v=>{
+                if(v==null||v==="")return "";
+                const h=String(v);
+                const out=[];
+                for(let i=0;i<h.length;i+=2) out.push(String.fromCharCode(parseInt(h.slice(i,i+2),16)^keyStr.charCodeAt((i/2)%keyStr.length)));
+                return out.join("");
+              };
+              const walk=o=>{
+                if(!o||typeof o!=="object")return;
+                if(Array.isArray(o)){o.forEach(walk);return;}
+                for(const k of Object.keys(o)){
+                  if(typeof o[k]==="object"&&o[k]!==null)walk(o[k]);
+                  else if((k==="email"||k==="sms"||k==="wechat"||k==="amount")&&typeof o[k]==="string")o[k]=decVal(o[k]);
+                }
+              };
+              walk(parsed);
+            }catch(_de){/* 解密失败则保留原值 */}
+          }
+          return parsed;
+        }
         console.warn("[store] 检测到损坏的本地数据（非对象），已重置为默认数据。请导出旧备份后可重新导入。");
       }catch(e){
         // 加固：JSON 解析失败不再静默吞掉——记录并回退 seed，保证页面始终能渲染（避免整页空白）
@@ -1554,7 +1579,38 @@ const store = {
     for(let i=0;i<6;i++) d.__trendLog[daysAgo(6-i)] = seedTrend[i];   // 前 6 天铺演示值，今天由 autoTrend 实时计算
     return d;
   },
-  saveLocal(){ try{ const s=JSON.stringify(data); storage.setItem(CONFIG.storageKey, s); try{ bak.save(s); }catch(_e){} }catch(e){ toast("存储空间已满，请导出备份后清理"); console.error("[store] saveLocal:", e); } },
+   saveLocal(){
+    try{
+      // P1-2: 敏感字段本地加密 — 开启时，金额、邮箱、手机号在落盘前 XOR+Base64 混淆
+      const enc=data.__encOn;
+      let s=JSON.stringify(data);
+      if(enc){
+        try{
+          const raw=JSON.parse(s);
+          const keyStr=(data.__encKey||"wb-default");
+          const encVal=v=>{
+            if(v==null||v==="")return "";
+            const b=String(v);
+            const out=[];
+            for(let i=0;i<b.length;i++) out.push((b.charCodeAt(i)^keyStr.charCodeAt(i%keyStr.length)).toString(16).padStart(2,"0"));
+            return out.join("");
+          };
+          const walk=o=>{
+            if(!o||typeof o!=="object")return;
+            if(Array.isArray(o)){o.forEach(walk);return;}
+            for(const k of Object.keys(o)){
+              if(typeof o[k]==="object"&&o[k]!==null)walk(o[k]);
+              else if((k==="email"||k==="sms"||k==="wechat"||k==="amount")&&o[k])o[k]=encVal(o[k]);
+            }
+          };
+          walk(raw);
+          s=JSON.stringify(raw);
+        }catch(_e){/* 加密失败则明文存储 */}
+      }
+      storage.setItem(CONFIG.storageKey, s);
+      try{ bak.save(s); }catch(_e){}
+    }catch(e){ toast("存储空间已满，请导出备份后清理"); console.error("[store] saveLocal:", e); }
+  },
   save(){ autoTrend(); this.saveLocal(); sync.schedulePush(); },
 };
 
@@ -3213,7 +3269,7 @@ function openMuteMenu(){
   const now=Date.now();
   const endOfToday=()=>{ const e=new Date(); e.setHours(23,59,59,999); return e.getTime(); };
   const nextMorning=()=>{ const e=new Date(); e.setDate(e.getDate()+1); e.setHours(9,0,0,0); return e.getTime(); };
-  const opts=[ {l:"暂停 1 小时",until:now+3600e3}, {l:"暂停 2 小时",until:now+7200e3}, {l:"到今晚 24 点",until:endOfToday()}, {l:"到明早 9 点",until:nextMorning()} ];
+  const opts=[ {l:"暂停 1 小时",until:now+3600e3}, {l:"暂停 2 小时",until:now+7200e3}, {l:"到今晚 24 点",until:endOfToday()}, {l:"到明早 9 点",until:nextMorning()}, {l:"暂停 1 周",until:now+7*86400e3} ];
   const overlay=document.createElement("div"); overlay.className="overlay";
   overlay.innerHTML=`<div class="modal" style="max-width:320px"><h3>🔕 暂停提醒</h3>
     <div class="sub">暂停期间所有响铃、反复提醒与云端推送都会静默，到期自动恢复，也可手动提前恢复。</div>
@@ -3495,9 +3551,10 @@ function remMeta(it){
 function remCardHTML(it){
   const tint=it.type==="alarm"?"#f2eef0":it.type==="birthday"?"#f6efe6":it.type==="anniv"?"#f6ece9":"#eef3ec";
   const ic=it.type==="alarm"?"bell":it.type==="birthday"?"heart":it.type==="anniv"?"calendar":"timer";
+  const grpBadge=it.group?`<span style="font-size:10.5px;font-weight:600;color:var(--accent);background:var(--accent-muted);border-radius:4px;padding:1px 6px;margin-left:5px;vertical-align:1px">${esc(it.group)}</span>`:"";
   return `<div class="rrow ${it.enabled===false||it.done?'off':''}" data-rid="${it.id}">
     <span class="rr-ic" style="background:${tint};color:var(--accent)">${icon(ic,18)}</span>
-    <div class="rr-b"><div class="rr-t">${esc(it.title||"未命名提醒")}</div><div class="rr-m">${remMeta(it)}${it.note?(" · "+esc(it.note)):""}</div></div>
+    <div class="rr-b"><div class="rr-t">${esc(it.title||"未命名提醒")}${grpBadge}</div><div class="rr-m">${remMeta(it)}${it.note?(" · "+esc(it.note)):""}</div></div>
     <label class="v2-switch" title="启用/停用"><input type="checkbox" class="js-rem-toggle" data-id="${it.id}" ${it.enabled!==false&&!it.done?"checked":""}><i></i></label>
     <button class="rr-btn js-rem-edit" data-id="${it.id}">编辑</button>
     <button class="rr-btn danger js-rem-del" data-id="${it.id}">删除</button></div>`;
@@ -3509,11 +3566,15 @@ function renderRemind(){
   const hi=holidayInfo(t);
   const dayType=hi?(hi.type==="off"?"假期 · "+hi.name:hi.name):(dow===0||dow===6)?"周末休息":"工作日";
   const nh=nextHoliday();
-  const list=data.remind||[];
-  const active=list.filter(x=>x.enabled!==false&&!x.done);
-  const alarms=list.filter(x=>x.type==="alarm"), days=list.filter(x=>x.type==="birthday"||x.type==="anniv"), quicks=list.filter(x=>x.type==="quick"&&!x.done);
-  const vis=alarms.length+days.length+quicks.length;   // v1.9.7: 列表可见条数——已触发的快捷提醒不显示也不计入"共 X 条"
-  const nextBdays=days.map(x=>({x,d:daysToMd(String(x.date||"").slice(5))})).filter(o=>o.d<=30).sort((a,b)=>a.d-b.d).slice(0,3);
+   const list=data.remind||[];
+   const active=list.filter(x=>x.enabled!==false&&!x.done);
+   // P1-1: 提醒分组筛选
+   const allGroups=[...new Set(list.filter(x=>x.group).map(x=>x.group))];
+   const remGroupFilter=data.__remGroupFilter||"";
+   const filtList=remGroupFilter?list.filter(x=>x.group===remGroupFilter):list;
+   const alarms=filtList.filter(x=>x.type==="alarm"), days=filtList.filter(x=>x.type==="birthday"||x.type==="anniv"), quicks=filtList.filter(x=>x.type==="quick"&&!x.done);
+   const vis=alarms.length+days.length+quicks.length;   // v1.9.7: 列表可见条数——已触发的快捷提醒不显示也不计入"共 X 条"
+   const nextBdays=days.map(x=>({x,d:daysToMd(String(x.date||"").slice(5))})).filter(o=>o.d<=30).sort((a,b)=>a.d-b.d).slice(0,3);
   const holiRows=Object.keys(HOLIDAY_2026.off).reduce((acc,md)=>{ const nm=HOLIDAY_2026.off[md]; const last=acc[acc.length-1];
     if(last&&last.name===nm&&last.md2===prevMd(md)) last.md2=md; else acc.push({name:nm,md1:md,md2:md}); return acc; },[]);
   function prevMd(md){ const d=new Date("2026-"+md); d.setDate(d.getDate()-1); return fmtLocal(d).slice(5); }
@@ -3538,6 +3599,10 @@ function renderRemind(){
   <div class="v2-layout">
     <div class="v2-main">
       <div class="sec-title">我的提醒 <span style="margin-left:auto"></span><button class="btn" id="btn-rem-new">${icon("plus",16,2.2)}新建提醒</button></div>
+      ${allGroups.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+        <button class="v2-chip ${remGroupFilter===""?"on":""}" data-remgrp="" style="font-size:11.5px;padding:3px 10px">全部</button>
+        ${allGroups.map(g=>`<button class="v2-chip ${remGroupFilter===g?"on":""}" data-remgrp="${attr(g)}" style="font-size:11.5px;padding:3px 10px">${esc(g)}</button>`).join("")}
+      </div>`:""}
       ${alarms.length?'<div class="tile-h" style="margin-bottom:10px"><span class="tic" style="color:var(--accent);display:flex">'+icon("bell",15)+'</span><span style="font-size:13px;font-weight:700">闹铃</span></div>'+alarms.map(remCardHTML).join(""):""}
       ${days.length?'<div class="tile-h" style="margin:16px 0 10px"><span class="tic" style="color:var(--accent);display:flex">'+icon("heart",15)+'</span><span style="font-size:13px;font-weight:700">生日 · 纪念日</span></div>'+days.map(remCardHTML).join(""):""}
       ${quicks.length?'<div class="tile-h" style="margin:16px 0 10px"><span class="tic" style="color:var(--accent);display:flex">'+icon("timer",15)+'</span><span style="font-size:13px;font-weight:700">快捷提醒</span></div>'+quicks.map(remCardHTML).join(""):""}
@@ -3558,8 +3623,14 @@ function renderRemind(){
         <div class="v2-tip">配置经同步后端加密隔离存储，由云端定时比对提醒并推送，电脑关机也能收到。需先开启多端同步。</div></div>
     </aside>
   </div>`;
-  $("#btn-rem-new").onclick=()=>openRemindEditor(null);
-  const muteBtn=$("#btn-mute");
+   $("#btn-rem-new").onclick=()=>openRemindEditor(null);
+   // P1-1: 分组筛选
+   $("#screen").querySelectorAll("[data-remgrp]").forEach(b=>b.onclick=()=>{
+     const g=b.dataset.remgrp||"";
+     if(g) data.__remGroupFilter=g; else delete data.__remGroupFilter;
+     store.saveLocal(); renderRemind();
+   });
+   const muteBtn=$("#btn-mute");
   if(muteBtn) muteBtn.onclick=()=>{
     if(remMuted()){ delete remState().muted; store.saveLocal(); ringHide(); renderRemind(); toast("已恢复提醒"); }
     else openMuteMenu();
@@ -3615,6 +3686,7 @@ function openRemindEditor(id){
       <label id="ro-f-min">多少分钟后<select id="ro-min">${QUICK_OPTS.map(o=>'<option value="'+o.m+'">'+o.l+'</option>').join("")}</select></label>
       <label id="ro-f-quick">到点后反复<select id="ro-quick">${optQuick}</select></label>
       <label class="full">备注<textarea id="ro-note" rows="2" placeholder="可选">${esc(it.note||"")}</textarea></label>
+      <label class="full">分组<input id="ro-group" value="${attr(it.group||"")}" placeholder="如：值班 / 家庭 / 工作 / 健身（可选）"></label>
     </div>
     <div class="ro-acts"><button class="rr-btn" id="ro-cancel">取消</button><button class="rb-btn" id="ro-save">保存</button></div></div>`;
   document.body.appendChild(mask);
@@ -3643,6 +3715,8 @@ function openRemindEditor(id){
     else if(ty==="alarm"){ item={type:"alarm",title,time:$id("ro-time").value||"09:00",repeat:$id("ro-repeat").value,date:$id("ro-repeat").value==="once"?$id("ro-date").value:"",quick,tz:$id("ro-tz").value==="auto"?"":$id("ro-tz").value}; }
     else { item={type:ty,title,date:$id("ro-date").value||today(),ahead:+$id("ro-ahead").value,quick,tz:$id("ro-tz").value==="auto"?"":$id("ro-tz").value}; }
     item.note=note; item.enabled=true;
+    const grp=$id("ro-group")? $id("ro-group").value.trim():"";
+    if(grp) item.group=grp; else delete item.group;
     if(id!=null){ Object.assign(it,item,{id:it.id}); if(it.done) delete it.done; }
     else { item.id=Date.now(); data.remind.unshift(item); }
     const rid=id!=null?it.id:item.id;
@@ -4108,6 +4182,15 @@ function renderSystemCfg(){
       <div class="sub" style="margin:6px 0 12px">页面加载后仍显示旧版 / 空白时，一键清除浏览器 Service Worker 冻结的旧页面（不影响本地数据）。</div>
       <button class="btn ghost" id="sys-clearsw">清除旧 Service Worker 缓存</button>
     </div>
+    <div class="side-card" style="margin:0">
+      <div class="sh">${icon("lock",15)} 敏感数据加密</div>
+      <div class="sub" style="margin:6px 0 12px">开启后，金额、邮箱等敏感字段在落盘前做 XOR 混淆，防止直接读取 localStorage 暴露明文。</div>
+      <label style="display:flex;align-items:center;gap:8px;font-size:13px;color:var(--text-secondary)">
+        <input type="checkbox" id="sys-enc" ${data.__encOn?"checked":""} style="width:18px;height:18px;cursor:pointer">
+        启用本地字段加密
+      </label>
+      <div class="sub" style="margin-top:6px">${data.__encOn?"已启用 · 密钥："+(data.__encKey||"wb-default"):"未启用"}</div>
+    </div>
   </div>`;
   $("#sys-export").onclick=exportData;
   $("#sys-import").onclick=()=>$("#sys-import-file").click();
@@ -4128,6 +4211,17 @@ function renderSystemCfg(){
         if("serviceWorker" in navigator){ return navigator.serviceWorker.getRegistration().then(function(r){ if(r) return r.unregister(); }).catch(function(){}); }
       }).then(done).catch(done);
     } else done();
+  };
+  // P1-2: 敏感数据加密开关
+  const encEl=$("#sys-enc");
+  if(encEl) encEl.onchange=function(){
+    if(encEl.checked){
+      data.__encOn=true; data.__encKey="wb-"+Date.now();
+      store.saveLocal(); renderSystemCfg(); toast("已启用本地字段加密（XOR 混淆）");
+    } else {
+      data.__encOn=false; delete data.__encKey;
+      store.saveLocal(); renderSystemCfg(); toast("已关闭本地字段加密");
+    }
   };
 }
 
@@ -4901,6 +4995,12 @@ sync.startAuto(); if(sync.on) sync.pull(true).then(function(){ if((sync.cfg().re
     <div class="ob-item"><span class="ob-ic">⭐</span><div><b>今日要事</b>：点记录上的星标，把重要的事置顶到首页</div></div>
     <div class="ob-item"><span class="ob-ic">🎨</span><div><b>外观</b>：右上角 🎨 换配色（琥珀/薄荷/摩卡/玫瑰），🌙 切深色模式</div></div>
     <div class="ob-item"><span class="ob-ic">🔒</span><div><b>数据安全</b>：数据存本机，左下角「导出备份」定期备份；设置里可开多端同步；删除的记录可在回收站恢复</div></div>
+    <div class="ob-item" id="ob-backup" style="display:none"><span class="ob-ic">💾</span><div><b>开启自动备份</b>：建议开启系统自动快照（每日保留 14 天），防止数据丢失</div>
+      <div style="margin-top:6px;display:flex;gap:8px">
+        <button class="ob-bak-on" id="ob-bak-on" style="font-size:12px;padding:5px 14px;background:var(--accent);color:var(--on-accent);border:none;border-radius:7px;cursor:pointer;font-weight:700">立即开启</button>
+        <button class="ob-bak-skip" id="ob-bak-skip" style="font-size:12px;padding:5px 14px;background:none;color:var(--text-tertiary);border:1px solid var(--border);border-radius:7px;cursor:pointer">暂不</button>
+      </div>
+    </div>
     <button class="ob-btn" id="ob-btn">开始使用</button>
   </div>
 </div>
@@ -4957,6 +5057,17 @@ sync.startAuto(); if(sync.on) sync.pull(true).then(function(){ if((sync.cfg().re
     if(o)o.addEventListener("click",function(e){if(e.target===o)hideGuide(true);});
     var first=false;try{first=!data.__onboarded;}catch(e){}
     if(first)setTimeout(showGuide,900);
+    // P1-2: 首启备份引导 — 若未开启自动快照，则显示「开启自动备份」入口
+    try{
+      var bakOff=!data.__bakAuto;
+      var obb=document.getElementById("ob-backup");
+      if(obb){ obb.style.display=bakOff?"":"none";
+        var onB=document.getElementById("ob-bak-on");
+        if(onB)onB.onclick=function(){ data.__bakAuto=true; store.saveLocal(); obb.style.display="none"; toast("自动快照已开启，每日保留 14 天"); };
+        var skB=document.getElementById("ob-bak-skip");
+        if(skB)skB.onclick=function(){ data.__bakAutoSkip=true; store.saveLocal(); obb.style.display="none"; };
+      }
+    }catch(_e){}
   }
   /* P0-1: 键盘弹起/收起时，移动端隐藏/恢复底部 Tab 栏 */
   if(window.visualViewport){
