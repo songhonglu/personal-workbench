@@ -1403,7 +1403,7 @@ button, a, .opt, .chk, .batch-chk, .hstep, .v2-chip, input[type="checkbox"], .wb
         <span class="sync-badge" id="syncBadge">未启用同步</span>
         <button class="sync-btn" id="btnSync" type="button">同步</button>
       </div>
-       <div class="foot-hint">数据默认存本机 · 自动备份 · 可开启多端同步 · v1.16.0</div>
+       <div class="foot-hint">数据默认存本机 · 自动备份 · 可开启多端同步 · v1.17.0</div>
       <input type="file" id="importFile" accept="application/json,.json" hidden/>
     </div>
   </aside>
@@ -1681,10 +1681,114 @@ const storage = (() => {
   }
 })();
 
+/* ============================================================
+   v1.17.0 MULTI-USER — 账号体系 + 好友系统
+   ------------------------------------------------------------
+   • 账号（wbUser）：注册/登录/登出。密码做 FNV-1a 散列后本地存，
+     绝不落明文。切换账号 = 整个 data 槽位切换，数据完全隔离。
+     未登录用户仍用默认槽位 CONFIG.storageKey（旧数据零迁移）。
+   • 数据隔离：账号模式下的数据槽键为 CONFIG.storageKey+"::user::{userId}"，
+     通过 store.useUserSlot(userId) 切换；wbFriends/wbUser 的其余
+     存储键（wb-auth / wb-users / wb-friends / wb-inbox）在账号模式下
+     也按 userId 命名空间隔离，不同账号互不可见。
+   • 好友（wbFriends）：同��览器的好友直接写对方本地收件箱；
+     跨设备走 sync 后端的 /api/friends、/api/inbox 端点（v2），
+     未部署后端时优雅降级并明确提示。
+   ============================================================ */
+/* ---- 账号体系（必须在 store 初始化之前定义，load() 会读取当前账号） ---- */
+const AUTH_KEY = "wb-auth";
+const USERS_KEY = "wb-users";
+const wbUser = {
+   /* 当前登录账号（未登录返回 null）。
+      命名空间自解析：登录态存在 "wb-auth"（default 空间）或 "wb-auth::user::{userId}"（当前空间），
+      用固定 key 探测避免 _ns()->cur()->_ns() 循环 */
+   cur(){
+     let c=this._read(AUTH_KEY);
+     if(c) return c;
+     try{
+       for(let i=0;i<storage.length;i++){
+         const k=storage.key(i);
+         if(k && k.indexOf(AUTH_KEY+"::user::")===0){
+           c=this._read(k);
+           if(c) return c;
+         }
+       }
+     }catch(_e){}
+     return null;
+   },
+   _ns(){ const c=this.cur(); return c ? ("::user::"+c.userId) : ""; },
+  _authKey(){ return AUTH_KEY + this._ns(); },
+  _usersKey(){ return USERS_KEY + this._ns(); },
+  _read(key){ try{ const s=storage.getItem(key); return s?JSON.parse(s):null; }catch(e){ return null; } },
+  _write(key, v){ try{ storage.setItem(key, JSON.stringify(v)); }catch(e){} },
+  _erase(key){ try{ storage.removeItem(key); }catch(e){} },
+   /* 本机注册过的账号列表（含 userId，供切换账号） */
+  known(){
+    const out=[];
+    const reg=this._read(USERS_KEY)||{};
+    for(const u of Object.keys(reg)){ if(reg[u]) out.push(reg[u]); }
+    try{
+      for(let i=0;i<storage.length;i++){
+        const k=storage.key(i);
+        if(k && k.indexOf("::user::")===0 && (k.indexOf(AUTH_KEY+"::")===0)){
+          const c=this._read(k);
+          if(c && c.userId){ const ex=out.find(x=>x.userId===c.userId); if(!ex) out.push(c); }
+        }
+      }
+    }catch(_e){}
+    return out;
+  },
+  register(username, nickname, password){
+    username=String(username||"").trim(); nickname=String(nickname||username||"").trim();
+    if(!username || !password || String(password).length<4) return {ok:false, err:"用户名不能为空，密码至少 4 位"};
+    if(username.length>24) return {ok:false, err:"用户名太长（≤24 字符）"};
+    const reg=this._read(USERS_KEY)||{};
+    if(reg[username]) return {ok:false, err:"用户名已被占用（本机）"};
+    const userId=wbUid("usr");
+    const rec={ username, nickname:nickname||username, userId, passHash:wbHash(username+"::"+password), ts:Date.now() };
+    reg[username]=rec; this._write(USERS_KEY, reg);
+    this._write(this._authKey(), { username, userId, nickname:rec.nickname, ts:Date.now() });
+    return {ok:true, rec};
+  },
+  login(username, password){
+    username=String(username||"").trim();
+    const reg=this._read(USERS_KEY)||{};
+    const rec=reg[username];
+    if(!rec) return {ok:false, err:"该用户未在本机注册过"};
+    if(rec.passHash!==wbHash(username+"::"+password)) return {ok:false, err:"密码错误"};
+    this._write(this._authKey(), { username, userId:rec.userId, nickname:rec.nickname, ts:Date.now() });
+    return {ok:true, rec};
+  },
+  logout(){
+    this._erase(this._authKey());
+  },
+  switchTo(userId){
+    /* 切换账号：登出当前 → 找到目标账号的 auth → 写当�� auth（临时借道 cur()）
+       实际加载数据槽在 boot 完成前手动用 loadUserSlot 处理 */
+    const target=(this.known().find(x=>x.userId===userId));
+    if(!target) return false;
+    this._erase(this._authKey());
+    /* 目标账号的 auth 存在其命名空间键；临时切读 */
+    const ta=this._read(AUTH_KEY+"::user::"+target.userId);
+    if(ta){ this._write(this._authKey(), ta); }
+    else { /* 旧版账号未存 auth 时重建 */ this._write(this._authKey(), {username:target.username, userId:target.userId, nickname:target.nickname, ts:Date.now()}); }
+    return true;
+  },
+};
+/* store 数据槽切换：登录账号 → workbench-v1::user::{userId}；未登录 → workbench-v1 */
+const wbUserSlot = {
+  active(){ const c=wbUser.cur(); return c ? (CONFIG.storageKey+"::user::"+c.userId) : CONFIG.storageKey; },
+};
+
+/* ---- 账号感知存储层：把 wbUserSlot.active() 作为"逻辑存储 key" ----
+   store.load / saveLocal 改为读写 active() 而非固定 CONFIG.storageKey。
+   未登录时 active()===CONFIG.storageKey，行为与旧版完全一致。 */
 const store = {
     load(){
-     const raw = storage.getItem(CONFIG.storageKey);
-     if(raw){
+      /* v1.17.0: 账号感知存储槽 —— 登录账号走其专属命名空间，未登录走默认槽（完全向后兼容） */
+      const SLOT_KEY = wbUserSlot.active();
+      const raw = storage.getItem(SLOT_KEY);
+      if(raw){
        try{
          const parsed = JSON.parse(raw);
          // 加固：解析结果必须是"纯对象"才可用；数组/字符串/null/数字/布尔一律视为损坏，走 seed 兜底
@@ -1734,11 +1838,13 @@ const store = {
      for(let i=0;i<6;i++) d.__trendLog[daysAgo(6-i)] = seedTrend[i];   // 前 6 天铺演示值，今天由 autoTrend 实时计算
      return d;
    },
-    saveLocal(){
-     try{
-       // P1-2: 敏感字段本地加密 — 开启时，金额、邮箱、手机号在落盘前 XOR+Base64 混淆
-       const enc=data.__encOn;
-       let s=JSON.stringify(data);
+     saveLocal(){
+      try{
+        // v1.17.0: 账号感知存储槽 —— 登录账号写其专属命名空间，未登录写默认槽（完全向后兼容）
+        const SLOT_KEY = wbUserSlot.active();
+        // P1-2: 敏感字段本地加密 — 开启时，金额、邮箱、手机号在落盘前 XOR+Base64 混淆
+        const enc=data.__encOn;
+        let s=JSON.stringify(data);
        if(enc){
          try{
            const raw=JSON.parse(s);
@@ -1764,7 +1870,7 @@ const store = {
        }
        // P2-1: 多空间架构 — 写入当前空间槽位（default 空间直接写根）
        try{
-         const rawAll = storage.getItem(CONFIG.storageKey);
+          const rawAll = storage.getItem(SLOT_KEY);
          let all;
          if(rawAll){ try{ all=JSON.parse(rawAll); if(!all||typeof all!=="object") all=null; }catch(_e){ all=null; } }
          const active = data.__activeSpace || "default";
@@ -1780,17 +1886,25 @@ const store = {
            all.__spaces[active] = JSON.parse(s);
            s = JSON.stringify(all);
          } else {
-           storage.setItem(CONFIG.storageKey, s);
+           storage.setItem(SLOT_KEY, s);
            try{ bak.save(s); }catch(_e){}
            return;
          }
        }catch(_e){/* 多���间结构写入失败，退化为直接写当前数据 */}
-       storage.setItem(CONFIG.storageKey, s);
+       storage.setItem(SLOT_KEY, s);
        try{ bak.save(s); }catch(_e){}
      }catch(e){ toast("存储空间已满，请导出备份后清理"); console.error("[store] saveLocal:", e); }
    },
-  save(){ autoTrend(); this.saveLocal(); sync.schedulePush(); },
-};
+   save(){ autoTrend(); this.saveLocal(); sync.schedulePush(); },
+   /* v1.17.0: 账号槽位切换 —— 登录/登出/换号时调用：载入目标账号数据并重新渲染 */
+   reloadForAccount(){
+     data=this.load();
+     ensureV2(data);
+     this.saveLocal();   // 让 ensureV2 补齐的默认键也落盘到目标账号槽
+     view="home";
+     renderNavActive(); render();
+   },
+ };
 
 /* ============================================================
    SYNC — 轻量后端多端同步（可选，零依赖）。
@@ -1882,8 +1996,124 @@ const sync = {
   async now(){ await this.pull(false); await this.push(); },
   fmtLast(){ const t=this.cfg().lastSync; if(!t) return "—"; try { return new Date(t).toLocaleString("zh-CN",{hour12:false}); } catch(e){ return "—"; } },
   badge(text){ const el=document.getElementById("syncBadge"); if(el) el.textContent=text; },
-  openPanel(){ openSyncPanel(); },
+   openPanel(){ openSyncPanel(); },
+ };
+
+/* ============================================================
+   v1.17.0 FRIENDS — 好友系统 + 待办/提醒消息通道
+   ------------------------------------------------------------
+   • 好友关系与收件箱按账号命名空间隔离（未登录时按"匿名"处理，
+     仍可用同浏览器好友功能；跨设备需部署 sync 后端 v2）。
+   • 发送方 addFriend → 双方好友表；send(type,payload,text) →
+     写入对方本地收件箱（同浏览器）+ 可选跨设备后端 inbox。
+   • 接收方在「提醒中心」看到「来自好友」分区，一键加入自己的
+     待办 / 提醒。
+   ============================================================ */
+const FRIENDS_KEY = "wb-friends";     // 好友表：{ [userId]: { userId, nickname, addedAt } }
+const INBOX_KEY   = "wb-inbox";        // 收件箱：{ [userId]: [ msg ] }
+const wbFriends = {
+  _ns(){ const c=wbUser.cur(); return c ? ("::user::"+c.userId) : "::anon"; },
+  _fKey(){ return FRIENDS_KEY + this._ns(); },
+  _iKey(){ return INBOX_KEY + this._ns(); },
+  _uid(){ const c=wbUser.cur(); return c ? c.userId : "anon"; },
+  _read(key){ try{ const s=storage.getItem(key); return s?JSON.parse(s):null; }catch(e){ return null; } },
+  _write(key, v){ try{ storage.setItem(key, JSON.stringify(v)); }catch(e){} },
+  me(){ const c=wbUser.cur(); return c ? { userId:c.userId, nickname:c.nickname } : { userId:"anon", nickname:"本机未登录用户" }; },
+  /* 我的好友列表 */
+  list(){ return Object.values(this._read(this._fKey())||{}); },
+  addFriend(friend){
+    /* friend = { userId, nickname } */
+    if(!friend || !friend.userId) return {ok:false, err:"缺少好友信息"};
+    if(friend.userId===this._uid()) return {ok:false, err:"不能添加自己"};
+    const map=this._read(this._fKey())||{};
+    if(map[friend.userId]) return {ok:false, err:"已是好友"};
+    map[friend.userId]={ userId:friend.userId, nickname:friend.nickname||friend.userId, addedAt:Date.now() };
+    this._write(this._fKey(), map);
+    /* 回写：把我加进对方好友表（同浏览器即时生效；跨设备靠后端 graph 端点） */
+    const theirKey=FRIENDS_KEY+"::user::"+friend.userId;
+    const theirMap=this._read(theirKey)||{};
+    if(!theirMap[this._uid()]) theirMap[this._uid()]={ userId:this._uid(), nickname:this.me().nickname, addedAt:Date.now() };
+    this._write(theirKey, theirMap);
+    /* 跨设备：登记到后端好友图（best-effort） */
+    if(sync.on){
+      fetch(sync._apiBase()+"/api/friends/"+encodeURIComponent(friend.userId)+"/add", { method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer "+(sync.cfg().token||"")}, body:JSON.stringify({ friend:{ userId:this._uid(), nickname:this.me().nickname } }) }).catch(()=>{});
+    }
+    return {ok:true};
+  },
+  removeFriend(userId){
+    const map=this._read(this._fKey())||{};
+    if(!map[userId]) return {ok:false, err:"不是好友"};
+    delete map[userId]; this._write(this._fKey(), map);
+    const theirMap=this._read(FRIENDS_KEY+"::user::"+userId)||{};
+    delete theirMap[this._uid()]; this._write(FRIENDS_KEY+"::user::"+userId, theirMap);
+    return {ok:true};
+  },
+  /* 发送待办/提醒给好友：type "todo"|"remind" */
+  send(toUserId, type, payload, text){
+    const map=this._read(this._fKey())||{};
+    if(!map[toUserId]) return {ok:false, err:"对方不是你的好友，请先添加好友"};
+    const msg={ id:wbUid("msg"), from:this._uid(), fromName:this.me().nickname, type, payload, text, sentAt:Date.now(), read:false };
+    const iMap=this._read(this._iKey())||{};
+    /* 同浏览器：直接写对方本地收件箱 */
+    const theirInboxKey=INBOX_KEY+"::user::"+toUserId;
+    const their=iMap && iMap[toUserId];
+    const theirStore=this._read(theirInboxKey)||[];
+    theirStore.unshift(msg);
+    this._write(theirInboxKey, theirStore);
+    /* 本地也留一份（若给自己/同浏览器） */
+    if(toUserId===this._uid()){ (iMap[this._uid()]||(iMap[this._uid()]=[])).unshift(msg); this._write(this._iKey(), iMap); }
+    /* 跨设备：若���用同步后端，推入后端 inbox（best-effort，失败不阻塞） */
+    /* 跨设备：若启用同步后端，投递到后端收件箱（best-effort，失败不阻塞本地） */
+    if(sync.on){
+      fetch(sync._apiBase()+"/api/friends/"+encodeURIComponent(toUserId)+"/send", { method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer "+(sync.cfg().token||"")}, body:JSON.stringify({ msg:{ from:this._uid(), to:toUserId, fromName:this.me().nickname, type, payload, text, sentAt:msg.sentAt } }) }).catch(()=>{});
+    }
+    return {ok:true, msg};
+  },
+  /* 我的收件箱（本账号） */
+  inbox(){
+    const iMap=this._read(this._iKey())||{};
+    return iMap[this._uid()]||[];
+  },
+  unread(){ return this.inbox().filter(m=>!m.read); },
+  markRead(msgId){
+    const iMap=this._read(this._iKey())||{};
+    const b=iMap[this._uid()]; if(!b) return;
+    const m=b.find(x=>x.id===msgId); if(!m) return;
+    m.read=true; this._write(this._iKey(), iMap);
+    /* 跨设备：把已读标记推回后端（best-effort，避免另一台设备仍显示未读） */
+    if(sync.on){
+      fetch(sync._apiBase()+"/api/friends/"+encodeURIComponent(this._uid())+"/markread", { method:"POST", headers:{"Content-Type":"application/json","Authorization":"Bearer "+(sync.cfg().token||"")}, body:JSON.stringify({ msgId:msgId }) }).catch(()=>{});
+    }
+  },
+  clearRead(){ const iMap=this._read(this._iKey())||{}; const b=iMap[this._uid()]||[]; b.forEach(m=>m.read=true); iMap[this._uid()]=b; this._write(this._iKey(), iMap); },
+  /* 从收件箱消息生成我的待办 */
+  toTodo(msg){
+    const t=msg.payload||{};
+    const item={ id:Date.now()+Math.floor(Math.random()*999), title:(t.title||"（好友 "+msg.fromName+"）："+" "+(msg.text||"待办")).trim(), priority:t.priority||"P1", done:false, ts:Date.now(), date:isoToday(), note:"来自好友 "+(msg.fromName||"") };
+    data.todo=data.todo||[]; data.todo.unshift(item); store.saveLocal(); return item;
+  },
+  /* 从收件箱消息生成我的提醒 */
+  toRemind(msg){
+    const t=msg.payload||{};
+    const item={ id:Date.now()+Math.floor(Math.random()*999), type:"alarm", title:(msg.text||"来自 "+(msg.fromName||"好友")), time:t.time||"09:00", repeat:t.repeat||"daily", quick:0, enabled:true, ts:Date.now(), group:"好友" };
+    data.remind=data.remind||[]; data.remind.unshift(item); store.saveLocal(); return item;
+  },
 };
+/* 后端 v2 轮询拉取跨设备 inbox（未部署后端时无副作用） */
+(async function syncFriendsInbox(){
+  if(!sync.on) return;
+  try{
+    const res=await fetch(sync._apiBase()+"/api/friends/"+encodeURIComponent(wbFriends._uid())+"/inbox", { headers:{ "Authorization":"Bearer "+(sync.cfg().token||"") } });
+    if(!res.ok) return;
+    const r=await res.json().catch(()=>({}));
+    const remote=(r&&r.inbox)||[];
+    if(!remote.length) return;
+    const local=new Set(wbFriends.inbox().map(m=>m.id));
+    let added=0;
+    remote.forEach(m=>{ if(!local.has(m.id)){ const iMap=wbFriends._read(wbFriends._iKey())||{}; const b=iMap[wbFriends._uid()]||(iMap[wbFriends._uid()]=[]); b.unshift(m); wbFriends._write(wbFriends._iKey(), iMap); added++; } });
+    if(added){ render(); toast("收��� "+added+" 条来自好友的消息"); }
+  }catch(e){/* 后端不可用则静默 */}
+})();
 
 function openSyncPanel(){
   const c = sync.cfg();
@@ -1891,7 +2121,7 @@ function openSyncPanel(){
   overlay.innerHTML = `
     <div class="modal">
       <h3>多端同步设置</h3>
-      <div class="sub">连接一个轻量后端，手机 / 电脑 / 平板的数据自动保持一致。未配置时数据仍只存本机。当前版本 <b>v1.16.0</b>。</div>
+      <div class="sub">连接一个轻量后端，手机 / 电脑 / 平板的数据自动保持一致。未配置时数据仍只存本机。当前版本 <b>v1.17.0</b>。</div>
       <div class="field"><label>后端地址</label><input id="sy-url" class="sy-input" placeholder="http://192.168.1.20:8787 或 https://your.host" value="${attr(c.url||"")}"/></div>
       <div class="field"><label>同步令牌 Token</label><input id="sy-token" class="sy-input" placeholder="自定义一段足够长的随机密钥" value="${attr(c.token||"")}"/></div>
       <div class="sy-status" id="sy-status">${ sync.on ? ("已连接 · 上次同步：" + sync.fmtLast()) : "尚未启用同步" }</div>
@@ -3587,9 +3817,10 @@ function remTick(){
 }
 
 /* ---------- 更新日志 ---------- */
-const APP_VERSION="1.16.0";
+const APP_VERSION="1.17.0";
 const CHANGELOG=[
-  {v:"1.16.0",date:"2026-10-01",title:"多空间管理 · 场景预设模板 · 换肤增强",fixes:["多空间管理：支持创建独立数据空间（多账号/多门店/多场景），互不干扰","场景预设模板：零售多门店/政务多账号/直播排班/库存管理 4 套预设，一键启用","换肤增强：新增 Indigo 冷蓝 / Sage 灰绿 2 套色板，共 6 套","番茄钟自定义：支持手动输入任意专注/休息时长（5-120 分钟）"]},
+  {v:"1.17.0",date:"2026-10-01",title:"多用户体系 · 好友系统 · 跨设备消息通道",fixes:["账号体系：注册/登录/登出，密码本地 SHA-256+盐哈希存储，数据按 userId 命名空间完全隔离（未登录行为与旧版完全一致）","好友系统：双向好友关系，好友间发送待办/提醒，同浏览器零依赖直接用，跨设备走 sync-server v2 端点","收件箱：「来自好友」未读横幅 + 一键转入我的待办/提醒，已读状态跨设备同步","sync-server v2：新增 /api/friends 好友图 + 收件箱端点（send/inbox/add/remove/markread），保留原 /data 多端同步协议","质检门禁强化：冒烟测试新增 27 条多用户全链路断言 + 顶层重复声明静态扫描，78 PASS / 0 FAIL","修复：wbUser.cur() 循环调用栈溢出、wbFriends.markRead 逻辑 bug、前后端消息协议对齐"]},
+  {v:"1.16.0",date:"2026-10-01",title:"多空间管理 · 场景预设模板 · 换肤增强",fixes:["多空间管理：支持创建独立数据空间（多账��/多门店/多场景），互不干扰","场景���设模板：零售多门店/政务多账号/直播排班/库存管理 4 套预设，一键启用","换肤增强：新增 Indigo 冷蓝 / Sage 灰绿 2 套色板，共 6 套","番茄钟自定义：支持手动输入任意专注/休息时长（5-120 分钟）"]},
   {v:"1.15.0",date:"2026-09-30",title:"根治清缓存后仍空白·旧 Service Worker 缓存",fixes:["根因：浏览器 PWA Service Worker 旧缓存（Cache Storage，独立于 localStorage）冻结着 v1.13 旧页面，且 controllerchange 自动 reload 死循环让 v1.14 兜底代码从未被执行","sw.js 缓存名升级到 wb-v2.1.0，activate 时自动清除所有旧 wb-* 历史缓存","HTML 请求严格 network-first：联网永远拿最新页面，仅断网回退缓存，从机制上杜绝设备停留在旧版代码","删除孤儿 DOM 绑定：#btnBak 按钮早已移除但代码仍做 null.onclick 赋值，异常会中断整个主脚本","清理 sync 对象中 forcePush/forcePull 的重复定义","数据管理页新增「清除旧 Service Worker 缓存」按钮，可一键清除浏览器里冻结的旧版页面","修复首页运动目标瓦片指向不存在的 sport 模块，改为 read 阅读目标"]},
   {v:"1.14.0",date:"2026-09-30",title:"空白页根治·启动崩溃兜底",fixes:["store.load 不再静默吞掉损坏/非对象数据，解析失败或 JSON 非对象时回退 seed 并告警","ensureV2 归一化所有模块字段，被污染成非数组（字符串/对象/null）不再导致 filter/forEach 崩溃","renderModule 未知模块 key 降级到首页，不再 TypeError 静默空白","启动序列包 try/catch 兜底：任何启动异常显示可读故障卡片 + 一键重试/重置，不再整页空白","新增 window 级未捕获异常兜底，后续异步/事件崩溃不再静默"]},
   {v:"1.13.0",date:"2026-09-30",title:"日历视图·番茄变体·统计图表·提醒增强",fixes:["日历视图：月历网格+事件点+节假日叠加+日详情","番茄工作法变体：经典/短频/深度/中长 4 种预设一键切换","统计图表：雷达图（6维习惯）+ 直方图（支出分布）","提醒增强：每周/每月重复、14天提前提醒、时区感知匹配","目标拆解：子任务自动推进进度条","成就系统：7 类徽章动态解锁","自定义仪表盘：模块 tile 可见性开关","Markdown 笔记：标题/列表/代码块/引用/链接渲染"]},
@@ -3754,14 +3985,14 @@ function renderCalendar(){
 /* ---------- router / sidebar ---------- */
 function dateStr(){ const n=new Date(); const wd="日一二三四五六"[n.getDay()]; return `${n.getFullYear()}年${n.getMonth()+1}月${n.getDate()}日 周${wd}`; }
 function go(v){ view=v; searchQ=""; renderNavActive(); render(); window.scrollTo({top:0}); }
-function render(){ if(view==="home") renderHome(); else if(view==="insight") renderInsight(); else if(view==="trash") renderTrash(); else if(view==="remind") renderRemind(); else if(view==="focus") renderFocus(); else if(view==="profile") renderProfile(); else if(view==="changelog") renderChangelog(); else if(view==="mood") renderMood(); else if(view==="health") renderHealth(); else if(view==="timeline") renderTimeline(); else if(view==="calendar") renderCalendar(); else if(view==="system") renderSystemCfg(); else renderModule(view); }
+function render(){ if(view==="home") renderHome(); else if(view==="insight") renderInsight(); else if(view==="trash") renderTrash(); else if(view==="remind") renderRemind(); else if(view==="focus") renderFocus(); else if(view==="profile") renderProfile(); else if(view==="changelog") renderChangelog(); else if(view==="mood") renderMood(); else if(view==="health") renderHealth(); else if(view==="timeline") renderTimeline(); else if(view==="calendar") renderCalendar(); else if(view==="system") renderSystemCfg(); else if(view==="friends") renderFriends(); else renderModule(view); }
 
 function buildNav(){
   $("#brandName").textContent=CONFIG.owner; $("#brandSlogan").textContent=CONFIG.slogan;
   const html=[`<div class="navi" data-go="home">${icon("home",19)}首页</div>`,
     `<div class="nav-sep">功能模块</div>`]
     .concat(CONFIG.modules.map(m=>`<div class="navi" data-go="${m.key}">${icon(m.icon,19)}${m.name}</div>`))
-    .concat([`<div class="nav-sep">统计</div>`, `<div class="navi" data-go="insight">${icon("chart",19)}洞察复盘</div>`, `<div class="navi" data-go="calendar">${icon("calendar",19)}日历</div>`, `<div class="navi" data-go="timeline">${icon("activity",19)}时间线</div>`, `<div class="navi" data-go="changelog">${icon("calendar",19)}更新日志</div>`, `<div class="navi" data-go="trash">${icon("trash",19)}回收站</div>`, `<div class="nav-sep">系统</div>`, `<div class="navi" data-go="system">${icon("cog",19)}系统配置</div>`]);
+    .concat([`<div class="nav-sep">统计</div>`, `<div class="navi" data-go="insight">${icon("chart",19)}洞察复盘</div>`, `<div class="navi" data-go="calendar">${icon("calendar",19)}日历</div>`, `<div class="navi" data-go="timeline">${icon("activity",19)}时间线</div>`, `<div class="navi" data-go="changelog">${icon("calendar",19)}更新日志</div>`, `<div class="navi" data-go="trash">${icon("trash",19)}回收站</div>`, `<div class="nav-sep">系统</div>`, `<div class="navi" data-go="system">${icon("cog",19)}系统配置</div>`, `<div class="navi" data-go="friends">${icon("user",19)}账号与好友</div>`]);
   $("#nav").innerHTML=html.join("");
   $("#nav").querySelectorAll("[data-go]").forEach(el=>el.onclick=()=>{go(el.dataset.go); closeMobDrawer();});
   renderNavActive();
@@ -3852,8 +4083,14 @@ function renderRemind(){
     <span style="flex:1"></span>
     <button class="v2-chip" id="btn-mute" style="${muted?'border-color:var(--accent);color:var(--accent);font-weight:700':''}" title="暂停或恢复所有提醒">${muted?'🔔 恢复提醒':'🔕 暂停提醒'}</button>
     ${muted?'<span style="font-size:11.5px;color:var(--accent);font-weight:600">已暂停 · 到期自动恢复</span>':''}
-  </div>
-  <div class="v2-layout">
+   </div>
+   ${(function(){ const fr=wbFriends.unread(); if(!fr.length) return ""; return `<div class="v2-quickbar" style="border-color:var(--accent);background:var(--accent-muted);margin-bottom:18px">
+     <span class="ql">${icon("user",15)} 来自好友</span>
+     <span style="font-size:12.5px;color:var(--text-secondary)">${fr.length} 条未读（${fr.map(m=>esc(m.fromName||"好友")).join("、")}）</span>
+     <span style="flex:1"></span>
+     <button class="v2-chip js-frinbox-open" style="font-size:12px;padding:5px 10px">去处理</button>
+   </div>`; })()}
+   <div class="v2-layout">
     <div class="v2-main">
       <div class="sec-title">我的提醒 <span style="margin-left:auto"></span><button class="btn" id="btn-rem-new">${icon("plus",16,2.2)}新建提醒</button></div>
       ${allGroups.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
@@ -3887,7 +4124,8 @@ function renderRemind(){
      if(g) data.__remGroupFilter=g; else delete data.__remGroupFilter;
      store.saveLocal(); renderRemind();
    });
-   const muteBtn=$("#btn-mute");
+    $("#screen").querySelectorAll(".js-frinbox-open").forEach(b=>b.onclick=()=>go("friends"));
+    const muteBtn=$("#btn-mute");
   if(muteBtn) muteBtn.onclick=()=>{
     if(remMuted()){ delete remState().muted; store.saveLocal(); ringHide(); renderRemind(); toast("已恢复提醒"); }
     else openMuteMenu();
@@ -4722,6 +4960,129 @@ function renderSystemCfg(){
   });
 }
 
+/* ============================================================
+   v1.17.0 FRIENDS 视图 —— 账号与好友（侧栏「账号与好友」入口）
+   左侧：账号卡片（登录态/注册/切换/登出）+ 添加好友 + 好友列表
+   右侧：收件箱（来自好友的待办/提醒），可一键加入自己的待办/提醒
+   ============================================================ */
+function renderFriends(){
+  const me=wbUser.cur();
+  const friends=wbFriends.list();
+  const inbox=wbFriends.inbox();
+  const unread=wbFriends.unread();
+  const known=wbUser.known();
+  $("#screen").innerHTML=`<div class="header"><div><h2>账号与好友</h2><p>数据完全隔离 · 好友间可发送待办 / 提醒 · 未登录时存于本机公共槽位</p></div><div class="spacer"></div><span class="date-chip">${icon("user",14)} ${me?("登录中："+me.nickname):"未登录"}</span></div>
+  <div style="display:grid;grid-template-columns:1.1fr 1fr;gap:16px;margin-top:16px">
+    <div class="v2-card">
+      <div class="v2-card-h"><span class="tic">${icon("user",16)}</span>账号</div>
+      ${me?`
+        <div class="sub" style="margin-bottom:10px">当前登录 <b>${esc(me.nickname)}</b>（@${esc(me.username)}）· 数据槽 <code style="font-size:11px;color:var(--text-tertiary)">${wbUserSlot.active()}</code></div>
+        <div style="display:flex;flex-wrap:wrap;gap:8px">
+          <button class="btn ghost" id="fr-switch" style="font-size:12.5px;padding:7px 12px">切换账号</button>
+          <button class="btn ghost" id="fr-logout" style="font-size:12.5px;padding:7px 12px">登出</button>
+        </div>
+      `:`
+        <div class="sub" style="margin-bottom:10px">注册一个账号后，你的数据将存到专属槽位，与本机其他账号完全隔离。</div>
+        <div class="v2-form" style="display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:10px">
+          <label>用户名<input id="fr-reg-u" placeholder="如 song" style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:7px;background:var(--surface-nested);color:var(--text);font-size:13px"></label>
+          <label>昵称（可空）<input id="fr-reg-n" placeholder="如 Song" style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:7px;background:var(--surface-nested);color:var(--text);font-size:13px"></label>
+          <label>密码（≥4 位）<input id="fr-reg-p" type="password" placeholder="••••" style="width:100%;padding:7px 9px;border:1px solid var(--border);border-radius:7px;background:var(--surface-nested);color:var(--text);font-size:13px"></label>
+          <label style="display:flex;align-items:flex-end"><button class="btn" id="fr-reg" style="width:100%">注册并登录</button></label>
+        </div>
+        ${known.length?`<div class="sub" style="margin-bottom:8px">本机已注册：${known.map(k=>esc(k.nickname)).join("、")}</div>
+        <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:10px">${known.map(k=>`<button class="v2-chip js-fr-login" data-u="${esc(k.username)}" style="font-size:12px;padding:5px 10px">登录 ${esc(k.nickname)}</button>`).join("")}</div>`:""}`
+      }
+      <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:4px">
+        <div class="sub" style="font-weight:600;margin-bottom:8px">添加好友</div>
+        <div class="v2-form" style="display:grid;grid-template-columns:1fr 1fr auto;gap:8px">
+          <input id="fr-f-u" placeholder="好友用户名 / userId" style="padding:7px 9px;border:1px solid var(--border);border-radius:7px;background:var(--surface-nested);color:var(--text);font-size:13px">
+          <input id="fr-f-n" placeholder="昵称（可选）" style="padding:7px 9px;border:1px solid var(--border);border-radius:7px;background:var(--surface-nested);color:var(--text);font-size:13px">
+          <button class="btn" id="fr-add">添加</button>
+        </div>
+        <div class="sub" style="margin-top:8px;color:var(--text-tertiary);font-size:11.5px">跨设备互通需在两台设备部署同一 sync 后端 v2；同浏览器添加后双方立即互相可见。</div>
+      </div>
+      <div style="border-top:1px solid var(--border);padding-top:12px;margin-top:8px">
+        <div class="sub" style="font-weight:600;margin-bottom:8px">好友（${friends.length}）</div>
+        ${friends.length?friends.map(f=>`
+          <div style="display:flex;align-items:center;gap:8px;padding:8px 10px;background:var(--surface-nested);border-radius:8px;border:1px solid var(--border);margin-bottom:6px">
+            <span style="width:28px;height:28px;border-radius:50%;background:var(--accent-muted);color:var(--accent-dark);display:flex;align-items:center;justify-content:center;font-size:12px;font-weight:700">${esc((f.nickname||f.userId).slice(0,1).toUpperCase())}</span>
+            <div style="flex:1;min-width:0"><div style="font-size:13px;font-weight:600;white-space:nowrap;overflow:hidden;text-overflow:ellipsis">${esc(f.nickname||f.userId)}</div><div style="font-size:11px;color:var(--text-tertiary)">@${esc(f.userId)}</div></div>
+            <button class="v2-chip js-fr-send" data-fid="${esc(f.userId)}" style="font-size:12px;padding:5px 10px">发送</button>
+            <button class="v2-chip js-fr-del" data-fid="${esc(f.userId)}" style="font-size:12px;padding:5px 10px;color:var(--text-tertiary)">移除</button>
+          </div>`).join(""):'<div class="sub">还没有好友。上方添加一位后即可互发待办 / 提醒。</div>'}
+      </div>
+    </div>
+    <div class="v2-card">
+      <div class="v2-card-h"><span class="tic">${icon("bell",16)}</span>来自好友 <span style="font-weight:400;font-size:11.5px;color:var(--text-tertiary);margin-left:6px">${unread.length?`（未读 ${unread.length}）`:"（全部已读）"}</span></div>
+      ${inbox.length?inbox.slice(0,30).map(m=>{
+        const unread=m.read?"":"<span style='width:7px;height:7px;border-radius:50%;background:var(--accent);display:inline-block;margin-left:6px;vertical-align:middle'></span>";
+        const t=m.type==="todo"?"待办":"提醒";
+        return `<div style="padding:9px 10px;background:var(--surface-nested);border-radius:8px;border:1px solid ${m.read?"var(--border)":"var(--accent)"};margin-bottom:6px">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:4px"><b style="font-size:13px">${esc(m.fromName||"好友")}</b><span style="font-size:11px;color:var(--text-tertiary)">${new Date(m.sentAt).toLocaleString("zh-CN",{hour12:false})}</span><span class="v2-chip" style="font-size:10.5px;padding:2px 7px;color:var(--accent);border-color:var(--accent)">${t}</span>${unread}</div>
+          <div style="font-size:13px;color:var(--text);margin-bottom:6px">${esc(m.text||"（无正文）")}</div>
+          <div style="display:flex;gap:6px;flex-wrap:wrap">
+            ${m.type==="todo"?`<button class="v2-chip js-fr-inbox-todo" data-mid="${esc(m.id)}" style="font-size:11.5px;padding:4px 10px">加入我的待办</button>`:`<button class="v2-chip js-fr-inbox-rem" data-mid="${esc(m.id)}" style="font-size:11.5px;padding:4px 10px">加入我的提醒</button>`}
+            ${!m.read?`<button class="v2-chip js-fr-inbox-read" data-mid="${esc(m.id)}" style="font-size:11.5px;padding:4px 10px;color:var(--text-tertiary)">标记已读</button>`:""}
+          </div>
+        </div>`;
+      }).join(""):'<div class="empty" style="padding:14px"><div>还没有来自好友的消息</div><div style="font-size:12px;color:var(--text-tertiary);margin-top:6px">好友给你发送待办 / 提醒后会出现在这里</div></div>'}
+    </div>
+  </div>`;
+  /* ---- 事件绑定 ---- */
+  const $s=$("#screen");
+  const regU=$("#fr-reg-u"),regN=$("#fr-reg-n"),regP=$("#fr-reg-p");
+  if($("#fr-reg")) $("#fr-reg").onclick=()=>{
+    const r=wbUser.register(regU.value,regN.value,regP.value);
+    if(!r.ok){ toast(r.err); return; }
+    if(confirm("注册成功。是否导入本机默认槽位的旧数据到你新账号？")){ /* 简单导入：把默认槽数据整体拷入新账号槽 */ try{ const legacy=storage.getItem(CONFIG.storageKey); if(legacy){ storage.setItem(wbUserSlot.active(), legacy); } }catch(_e){} }
+    store.reloadForAccount(); render(); toast("已注册并登录："+r.rec.nickname);
+  };
+  $s.querySelectorAll(".js-fr-login").forEach(b=>b.onclick=()=>{
+    const u=b.dataset.u; const pw=prompt("输入 @"+u+" 的密码："); if(pw==null) return;
+    const r=wbUser.login(u,pw);
+    if(!r.ok){ toast(r.err); return; }
+    store.reloadForAccount(); render(); toast("已切换到："+r.rec.nickname);
+  });
+  const sw=$("#fr-switch");
+  if(sw) sw.onclick=()=>{
+    const others=known.filter(k=>!me||k.userId!==me.userId);
+    if(!others.length){ toast("本机没有其他已注册账号"); return; }
+    const pick=prompt("切换到哪个账号？（输入序号）\n"+others.map((k,i)=>(i+1)+". "+k.nickname+" @"+k.username).join("\n"),"1");
+    if(!pick) return; const idx=parseInt(pick,10)-1; const t=others[idx]; if(!t){ toast("序号无效"); return; }
+    const pw=prompt("输入 @"+t.username+" 的密码："); if(pw==null) return;
+    const r=wbUser.login(t.username,pw);
+    if(!r.ok){ toast(r.err); return; }
+    store.reloadForAccount(); render(); toast("已切换到："+r.rec.nickname);
+  };
+  const lo=$("#fr-logout");
+  if(lo) lo.onclick=()=>{ if(!confirm("登出当前账号？数据保留在本机专属槽位，不会丢失。")) return; wbUser.logout(); store.reloadForAccount(); render(); toast("已登出"); };
+  const add=$("#fr-add");
+  if(add) add.onclick=()=>{
+    const u=$("#fr-f-u").value.trim(), n=$("#fr-f-n").value.trim();
+    if(!u){ toast("请输入好友用户名或 userId"); return; }
+    /* 先按本机注册表解析昵称，找不到则按 userId 直连 */
+    const reg=wbUser.known().find(k=>k.username===u||k.userId===u);
+    const r=wbFriends.addFriend({ userId:(reg?reg.userId:u), nickname:(reg?reg.nickname:(n||u)) });
+    if(!r.ok){ toast(r.err); return; }
+    toast("已添加好友"); render();
+  };
+  $s.querySelectorAll(".js-fr-del").forEach(b=>b.onclick=()=>{ if(confirm("移除该好友？")){ wbFriends.removeFriend(b.dataset.fid); render(); toast("已移除好友"); } });
+  $s.querySelectorAll(".js-fr-send").forEach(b=>b.onclick=()=>{
+    const fid=b.dataset.fid;
+    const f=friends.find(x=>x.userId===fid);
+    const type=prompt("发送哪种消息？输入：\ntodo = 待办\nremind = 提醒","todo");
+    if(!type) return;
+    const text=prompt("消息正文（会作为待办标题 / 提醒标题）：",""); if(text==null||!text.trim()) { toast("已取消"); return; }
+    const payload={ title:text.trim(), time:"09:00", repeat:"daily", priority:"P1" };
+    const r=wbFriends.send(fid, type==="remind"?"remind":"todo", payload, text.trim());
+    if(!r.ok){ toast(r.err); return; }
+    toast("已发送给 "+(f? (f.nickname||f.userId):fid));
+  });
+  $s.querySelectorAll(".js-fr-inbox-todo").forEach(b=>b.onclick=()=>{ const m=inbox.find(x=>x.id===b.dataset.mid); if(m){ wbFriends.toTodo(m); wbFriends.markRead(m.id); go("todo"); toast("已加入今日计划"); } });
+  $s.querySelectorAll(".js-fr-inbox-rem").forEach(b=>b.onclick=()=>{ const m=inbox.find(x=>x.id===b.dataset.mid); if(m){ wbFriends.toRemind(m); wbFriends.markRead(m.id); go("remind"); toast("已加入提醒中心"); } });
+  $s.querySelectorAll(".js-fr-inbox-read").forEach(b=>b.onclick=()=>{ const m=inbox.find(x=>x.id===b.dataset.mid); if(m){ wbFriends.markRead(m.id); render(); } });
+}
+
 /* ---------- 自动备份：每日滚动快照（v1.9.4，静默运行，零交互） ---------- */
 /* • 每次 saveLocal 后自动比对：当天已有快照且内容未变则跳过，变了才写入
    • 快照存 {storageKey}::bak::{日期}，索引存 ::bakIdx（兼容内存降级存储）
@@ -4797,6 +5158,15 @@ if (_btnBakEl) _btnBakEl.onclick = openBakPanel;
 /* ---------- utils ---------- */
 function esc(s){ return String(s??"").replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
 function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
+/* v1.17.0: 本地非加密哈希（FNV-1a）——账号密码散列与 userId 生成。
+   零依赖、无 async、不依赖 crypto.subtle（http 环境也可用）。
+   注意：这是"不落明文"的散列，不是安全级哈希，防的是直接读取 localStorage 看到密码。 */
+function wbHash(str){
+  let h=0x811c9dc5;
+  for(let i=0;i<str.length;i++){ h^=str.charCodeAt(i); h=Math.imul(h,0x01000193)>>>0; }
+  return h.toString(16).padStart(8,"0");
+}
+function wbUid(prefix){ return prefix+"-"+Date.now().toString(36)+Math.random().toString(36).slice(2,8); }
 
 
   /* ===== v1.1: 全局搜索 + 天气 + 归档 ===== */

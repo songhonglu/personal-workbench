@@ -113,8 +113,79 @@ const markers = [
   ["reminder mute menu", "openMuteMenu"],
   ["reminder mute guard", "remMuted"],
   ["focus-visible polish", ":focus-visible"],
+  // —— 多用户体系 (v1.17.0) ——
+  ["multiuser AUTH_KEY", "wb-auth"],
+  ["multiuser USERS_KEY", "wb-users"],
+  ["multiuser register()", "wbUser.register"],
+  ["multiuser login()", "wbUser.login"],
+  ["multiuser logout()", "wbUser.logout"],
+  ["multiuser cur()", "wbUser.cur"],
+  ["multiuser known()", "wbUser.known"],
+  ["multiuser SLOT_KEY", "SLOT_KEY"],
+  ["multiuser friends key", "FRIENDS_KEY"],
+  ["multiuser inbox key", "INBOX_KEY"],
+  ["multiuser wbFriends.send", "wbFriends.send"],
+  ["multiuser wbFriends.inbox", "wbFriends.inbox"],
+  ["multiuser wbFriends.markRead", "wbFriends.markRead"],
+  ["multiuser wbFriends.addFriend", "wbFriends.addFriend"],
+  ["multiuser friends view", "renderFriends"],
+  ["multiuser friends nav", 'data-go="friends"'],
+  ["multiuser inbox banner", "来自好友"],
+  ["multiuser reloadForAccount", "reloadForAccount"],
+  ["multiuser useUserSlot", "useUserSlot"],
+  // —— sync-server v2 标记（文件内容检查）——
 ];
 const srcLines = markers.map(([name, token]) =>
   (html.includes(token) ? "PASS" : "FAIL") + " :: " + name + " («" + token + "»)");
-console.log(srcLines.join("\n"));
-process.exit((/FAIL/.test(checks) || srcLines.some(l => /FAIL/.test(l))) ? 1 : 0);
+
+// —— sync-server.js 编译级检查（Node 侧直接读文件）——
+const syncServerSrc = fs.readFileSync("sync-server.js","utf8");
+const syncMarkers = [
+  ["sync-server /data GET", "/data"],
+  ["sync-server /data PUT", "PUT"],
+  ["sync-server friends send", "send"],
+  ["sync-server friends inbox", "inbox"],
+  ["sync-server friends add", "add"],
+  ["sync-server friends markread", "markread"],
+  ["sync-server friends remove", "remove"],
+  ["sync-server authed()", "authed"],
+  ["sync-server store.inbox", "store.inbox"],
+  ["sync-server store.friends", "store.friends"],
+];
+const syncLines = syncMarkers.map(([name, token]) =>
+  (syncServerSrc.includes(token) ? "PASS" : "FAIL") + " :: " + name + " («" + token + "»)");
+console.log(syncLines.join("\n"));
+
+// —— 重复声明静态检查（仅检测顶层 const/let/function 重复；函数内部同名变量属于正常 JS 作用域，不报错）——
+function checkDuplicateDeclarations(code, name){
+  const lines = code.split("\n");
+  const decls = [];
+  lines.forEach((line, i) => {
+    // 仅匹配列 0 的顶层声明（排除 function 体内的局部变量）
+    const m = line.match(/^(const|let|function)\s+(\w+)/);
+    if (m) decls.push({name: m[2], line: i+1});
+  });
+  const seen = {};
+  decls.forEach(d => {
+    if (!seen[d.name]) seen[d.name] = [];
+    seen[d.name].push(d.line);
+  });
+  const dups = [];
+  for (const [n, ls] of Object.entries(seen)) {
+    if (ls.length > 1) dups.push(n + " (lines " + ls.join(", ") + ")");
+  }
+  return dups;
+}
+const dupDecls = checkDuplicateDeclarations(html, "workbench.html");
+const dupServerDecls = checkDuplicateDeclarations(syncServerSrc, "sync-server.js");
+const dupLines = [
+  (dupDecls.length === 0 ? "PASS" : "FAIL") + " :: no duplicate const/function in workbench.html" + (dupDecls.length ? " → " + dupDecls.join("; ") : ""),
+  (dupServerDecls.length === 0 ? "PASS" : "FAIL") + " :: no duplicate const/function in sync-server.js" + (dupServerDecls.length ? " → " + dupServerDecls.join("; ") : "")
+];
+console.log(dupLines.join("\n"));
+
+const srcAll = [...srcLines, ...syncLines, ...dupLines];
+console.log(srcAll.join("\n"));
+const failCount = srcAll.filter(l => l.startsWith("FAIL")).length;
+console.log("\n[summary] " + (srcAll.length - failCount) + " PASS / " + failCount + " FAIL (source-marker + sync-server + dup-check)");
+process.exit((/FAIL/.test(checks) || srcAll.some(l => l.startsWith("FAIL"))) ? 1 : 0);
