@@ -2002,7 +2002,7 @@ const wbCrypto = {
   async encrypt(obj, token){
     const key = await this._derive(token);
     const iv = crypto.getRandomValues(new Uint8Array(12));
-    const exp = Date.now() + 2*3600*1000;
+    const exp = Date.now() + 30*24*3600*1000;   // v3.1: 加密缓存 30 天有效，避免长期未打开的设备解密失败
     const ct = new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM", iv}, key, new TextEncoder().encode(JSON.stringify(obj))));
     const b64 = u8 => btoa(String.fromCharCode(...u8));
     return { ct:b64(ct), iv:b64(iv), exp, rev:(obj.__syncRev||0) };
