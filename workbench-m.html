@@ -1203,7 +1203,7 @@ const sync = {
       const localRev = this.cfg().rev||0;
       if(!this._base()) this._saveBase(data);
       if(r && r.data!=null && (r.rev||0) > localRev){
-        const _remote=r.data; data = this.mergeData(_remote); autoTrend(); store.saveLocal();
+        const _remote=r.data; data = this.mergeData(_remote); ensureV2M(data); autoTrend(); store.saveLocal();
         this.set("rev", r.rev); if(r.updatedAt) this.set("updatedAt", r.updatedAt);
         this.set("lastSync", Date.now()); this._saveBase(data); render();
         if(JSON.stringify(data)!==JSON.stringify(_remote)){ this.schedulePush(); if(!silent) toast("已合并本地与云端数据"); this.badge("已同步"); }
@@ -1282,7 +1282,168 @@ function openSyncPanel(){
   };
 }
 
+/* ---------- 数据归一化：5 个新模块（remind/focus/profile/mood/health）字段兜底，与桌面版 ensureV2 数据模型保持一致，双端同步无损 ---------- */
+function pad2(n){ return String(n).padStart(2,"0"); }
+const HOLIDAY_2026={
+  off:{"01-01":"元旦","01-02":"元旦","01-03":"元旦","02-15":"春节","02-16":"春节","02-17":"春节","02-18":"春节","02-19":"春节","02-20":"春节","02-21":"春节","02-22":"春节","02-23":"春节","04-04":"清明","04-05":"清明","04-06":"清明","05-01":"劳动节","05-02":"劳动节","05-03":"劳动节","05-04":"劳动节","05-05":"劳动节","06-19":"端午","06-20":"端午","06-21":"端午","09-25":"中秋","09-26":"中秋","09-27":"中秋","10-01":"国庆","10-02":"国庆","10-03":"国庆","10-04":"国庆","10-05":"国庆","10-06":"国庆","10-07":"国庆"},
+  work:{"01-04":"元旦调休","02-14":"春节调休","02-28":"春节调休","05-09":"劳动节调休","09-20":"国庆调休","10-10":"国庆调休"}
+};
+function holidayInfo(ds){ const md=String(ds||"").slice(5); if(HOLIDAY_2026.off[md]) return {type:"off",name:HOLIDAY_2026.off[md]}; if(HOLIDAY_2026.work[md]) return {type:"work",name:HOLIDAY_2026.work[md]}; return null; }
+function daysToMd(md){ const n=new Date(); const mk=y=>new Date(y,+md.slice(0,2)-1,+md.slice(3,5)); let t=mk(n.getFullYear()); if(fmtLocal(t)<fmtLocal(n)) t=mk(n.getFullYear()+1); const today0=new Date(n.getFullYear(),n.getMonth(),n.getDate()); return Math.round((t-today0)/86400000); }
+function nextHoliday(){ const n=new Date(); for(let i=0;i<400;i++){ const d=new Date(n); d.setDate(n.getDate()+i); const hi=holidayInfo(fmtLocal(d)); if(hi&&hi.type==="off") return {name:hi.name,days:i}; } return null; }
+const QUICK_OPTS=[{m:5,l:"5 分钟"},{m:10,l:"10 分钟"},{m:15,l:"15 分钟"},{m:30,l:"30 分钟"},{m:45,l:"45 分钟"},{m:60,l:"1 小时"},{m:120,l:"2 小时"}];
+const QUICK_LABEL={0:"不反复",5:"每 5 分钟",10:"每 10 分钟",15:"每 15 分钟",30:"每 30 分钟",45:"每 45 分钟",60:"每 1 小时",120:"每 2 小时"};
+function pomoToday(){ const P=data.__pomo; if(!P.today||P.today.date!==isoToday()) P.today={date:isoToday(),count:0,min:0}; return P.today; }
+function _focusDef(){ let f=25, b=5; try { f=(data.focus&&data.focus.focusMin)||25; b=(data.focus&&data.focus.breakMin)||5; } catch(e){ /* data 处于 TDZ 时回退默认值 */ } return {f,b}; }
+const _FD=_focusDef();
+let pomo = { mode:"focus", running:false, remain:_FD.f*60, total:_FD.f*60 };   // 番茄钟状态（内存态，跨渲染保留）
+let pomoTimer = null;
+function pomoUpdate(){
+  const t=$("#pomo-time"); if(t){ t.textContent=`${pad2(Math.floor(pomo.remain/60))}:${pad2(pomo.remain%60)}`; }
+  const fg=$("#pomo-fg"); if(fg){ const r=64,c=2*Math.PI*r; fg.style.strokeDashoffset=c*(1-pomo.remain/Math.max(1,pomo.total)); }
+  const st=$("#pomo-status"); if(st) st.textContent=pomo.running?(pomo.mode==="break"?"休息中":"专注中"):"已暂停";
+  const b=$("#pomo-toggle"); if(b) b.textContent=pomo.running?"暂停":"开始";
+}
+function pomoBeep(){
+  try{
+    if(!window._pomoAudio) window._pomoAudio=new (window.AudioContext||window.webkitAudioContext)();
+    const ctx=window._pomoAudio; if(ctx.state==="suspended") ctx.resume();
+    [0,.18,.36].forEach(dt=>{ const o=ctx.createOscillator(),g=ctx.createGain();
+      o.connect(g); g.connect(ctx.destination); o.type="sine"; o.frequency.value=880;
+      const t0=ctx.currentTime+dt; g.gain.setValueAtTime(0,t0); g.gain.linearRampToValueAtTime(.22,t0+.02); g.gain.exponentialRampToValueAtTime(.001,t0+.15);
+      o.start(t0); o.stop(t0+.16); });
+  }catch(e){}
+}
+function completePomo(){
+  const wasFocus=pomo.mode!=="break";
+  pomo.running=false;
+  if(wasFocus){
+    const T=pomoToday(); T.count++; T.min+=Math.round(pomo.total/60);
+    data.__pomo.total.count++; data.__pomo.total.min+=Math.round(pomo.total/60);
+    data.__pomo.history=data.__pomo.history||[];
+    data.__pomo.history.push({date:today(),min:Math.round(pomo.total/60),ts:Date.now()});
+    if(data.__pomo.history.length>500) data.__pomo.history=data.__pomo.history.slice(-500);
+    store.saveLocal();
+  }
+  pomo.mode=wasFocus?"break":"focus";
+  pomo.total=(wasFocus?(data.focus.breakMin||5):(data.focus.focusMin||25))*60;
+  pomo.remain=pomo.total;
+  const T2=pomoToday(), P=data.__pomo, goal=data.focus.goal||8, pct=Math.min(100,Math.round(T2.count/goal*100));
+  const c=$("#f-tc"); if(c) c.textContent=T2.count;
+  const mn=$("#f-tm"); if(mn) mn.textContent=T2.min;
+  const gb=$("#f-goalbar"); if(gb) gb.style.width=pct+"%";
+  const gp=$("#f-goalpct"); if(gp) gp.textContent=pct+"%";
+  const tc=$("#f-totc"); if(tc) tc.textContent=P.total.count;
+  const tm=$("#f-totm"); if(tm) tm.textContent=P.total.min;
+  pomoBeep();
+}
+function pomoTick(){
+  if(!pomo.running) return;
+  pomo.remain--;
+  if(pomo.remain<=0) completePomo();
+  pomoUpdate();
+}
+function pomoHeartbeat(){
+  if(pomo.running){
+    pomoTick();
+  }
+  try{ remTickMobile(); }catch(e){}
+}
+function startPomoHeart(){ if(!pomoHeart) return; pomoHeart=setInterval(pomoHeartbeat,1000); }
+var pomoHeart=null;
+
+/* ---------- 移动端提醒调度（与桌面版 remTick 数据模型一致：fired 幂等 + queue 反复 + muted 暂停） ---------- */
+function remMutedM(){ const st=data.__remindState; if(!st.muted||!st.muted.until) return false; if(Date.now()>=st.muted.until){ delete st.muted; return false; } return true; }
+function remRingShow(it,sub){
+  let b=$("#m-ring");
+  if(!b){ b=document.createElement("div"); b.id="m-ring"; b.style.cssText="position:fixed;left:12px;right:12px;bottom:calc(78px + env(safe-area-inset-bottom));z-index:80;background:var(--surface-card);border:1px solid var(--border);border-radius:14px;box-shadow:var(--shadow-card,0 4px 16px rgba(0,0,0,.08));padding:12px 14px;display:none"; document.body.appendChild(b); }
+  b.innerHTML=`<div style="display:flex;align-items:center;gap:10px">
+    <span style="font-size:22px">🔔</span>
+    <div style="flex:1;min-width:0"><div style="font-size:13.5px;font-weight:700">${esc(it.title||"提醒")}</div>
+    ${sub?`<div style="font-size:11.5px;color:var(--text-secondary);margin-top:2px">${esc(sub)}</div>`:""}</div>
+    <button id="m-ring-ok" style="border:none;background:var(--accent);color:var(--on-accent);border-radius:8px;padding:8px 12px;font-size:12px;font-weight:700;cursor:pointer">知道了</button></div>`;
+  b.style.display="block";
+  b.querySelector("#m-ring-ok").onclick=()=>{ b.style.display="none"; ringBeepOffM(); };
+  ringBeepOnM();
+  if(!b._beepTok) b._beepTok=setInterval(()=>{ ringBeepOffM(); ringBeepOnM(); },1500);
+  b._it=it;
+}
+function remRingHide(){ const b=$("#m-ring"); if(!b) return; b.style.display="none"; ringBeepOffM(); if(b._beepTok){ clearInterval(b._beepTok); b._beepTok=null; } }
+let _ringCtxM=null,_ringOscM=null;
+function ringBeepOnM(){
+  try{
+    if(!_ringCtxM) _ringCtxM=new (window.AudioContext||window.webkitAudioContext)();
+    if(_ringCtxM.state==="suspended") _ringCtxM.resume();
+    ringBeepOffM();
+    const o=_ringCtxM.createOscillator(),g=_ringCtxM.createGain();
+    o.connect(g); g.connect(_ringCtxM.destination); o.type="sine"; o.frequency.value=880;
+    g.gain.setValueAtTime(0,_ringCtxM.currentTime); g.gain.linearRampToValueAtTime(.25,_ringCtxM.currentTime+.02);
+    o.start(); _ringOscM={o,g};
+  }catch(e){}
+}
+function ringBeepOffM(){ if(_ringOscM){ try{_ringOscM.o.stop(); _ringOscM.o.disconnect(); _ringOscM.g.disconnect();}catch(e){} _ringOscM=null; } }
+function remFireM(it,tag,sub){
+  const st=data.__remindState;
+  if(st.fired[tag]) return; st.fired[tag]=1;
+  remRingShow(Object.assign({},it,{sub:sub||it.sub}));
+  if(it.type==="quick"){ it.done=true; it.enabled=false; }
+  if(+it.quick>0){ const qe={id:it.id,title:it.title,nextAt:Date.now()+it.quick*60000,quick:+it.quick}; st.queue.push(qe); }
+  store.saveLocal();
+}
+function remTickMobile(){
+  const n=new Date(); const ds=fmtLocal(n); const hm=pad2(n.getHours())+":"+pad2(n.getMinutes());
+  const st=data.__remindState;
+  if(remMutedM()) return;
+  st.queue=st.queue.filter(q=>{
+    if(Date.now()>=q.nextAt){ remRingShow(Object.assign({},q,{sub:"反复提醒 · 到点啦"}),q);
+      if(q.quick>0&&!q.snooze){ q.nextAt=Date.now()+q.quick*60000; return true; }
+      return false;
+    }
+    return true;
+  });
+  (data.remind||[]).forEach(it=>{
+    if(!it||it.enabled===false||it.done) return;
+    if(it.type==="quick"){ if(it.at&&Date.now()>=+it.at) remFireM(it,"q-"+it.id+"-"+it.at,"快捷提醒时间到"); return; }
+    if(it.type==="alarm"){
+      let localHm=hm;
+      if(it.tz){ const m=/^GMT([+-]\d+)$/.exec(it.tz); if(m){ const off=+m[1]*3600; const utc=new Date(n.getTime()-n.getTimezoneOffset()*60000); const target=new Date(utc.getTime()+off*1000); localHm=pad2(target.getUTCHours())+":"+pad2(target.getUTCMinutes()); } }
+      const rep=it.repeat||"daily"; const dow=n.getDay();
+      if(rep==="weekdays"&&(dow===0||dow===6)) return;
+      if(rep==="weekly"){ const dw=new Date(it.date+"T00:00:00").getDay(); if(dw!==dow) return; }
+      if(rep==="monthly"){ const dom=String(it.date||"").slice(8); if(dom!==String(n.getDate()).padStart(2,"0")) return; }
+      if(rep==="once"&&it.date!==ds) return;
+      if(localHm===it.time) remFireM(it,"a-"+it.id+"-"+ds+"-"+hm,"闹铃时间 · "+hm+(it.tz?"（"+it.tz+"）":""));
+    } else if(it.type==="anniv"||it.type==="birthday"){
+      const md=String(it.date||"").slice(5); if(md.length!==5) return;
+      const diff=daysToMd(md), ahead=+(it.ahead||0);
+      if(diff===0) remFireM(it,it.type+"-"+it.id+"-"+ds,it.type==="birthday"?(it.title+"，生日快乐！"):("今天是「"+it.title+"」纪念日"));
+      else if(ahead>0&&diff===ahead) remFireM(it,it.type+"-"+it.id+"-"+ds+"-a","「"+it.title+"」还有 "+ahead+" 天就到了");
+    }
+  });
+  if(hm==="08:00"){ const hi=holidayInfo(ds);
+    if(hi) remFireM({title:hi.type==="off"?("今天是"+hi.name+"假期"):("今天是"+hi.name+"，记得上班"),type:"holiday"},"h-"+ds,hi.type==="off"?"放假啦，好好休息":"调休上班日");
+  }
+}
+
+function ensureV2M(d){
+  CONFIG.modules.forEach(m=>{ if(!Array.isArray(d[m.key])) d[m.key]=[]; });
+  if(!d.focus||typeof d.focus!=="object"||Array.isArray(d.focus)) d.focus={focusMin:25,breakMin:5,goal:8};
+  if(!d.profile||typeof d.profile!=="object"||Array.isArray(d.profile)) d.profile={nickname:"",gender:"",birthday:"",phone:"",email:"",wechat:"",city:"",job:"",motto:""};
+  if(!d.__pomo||typeof d.__pomo!=="object"){ const P=(d.__pomo&&d.__pomo.total)?d.__pomo:null; d.__pomo=P||{total:{count:0,min:0},today:{date:"",count:0,min:0}}; }
+  const P=d.__pomo; if(!P.total) P.total={count:0,min:0}; if(!P.today||P.today.date!==isoToday()) P.today={date:isoToday(),count:0,min:0};
+  if(!d.__mood||typeof d.__mood!=="object"||Array.isArray(d.__mood)) d.__mood={};
+  if(!d.__health||typeof d.__health!=="object"||Array.isArray(d.__health)) d.__health={};
+  if(!d.__health.goals||typeof d.__health.goals!=="object") d.__health.goals={water:8,steps:8000,sleep:8};
+  if(!d.__remindState||typeof d.__remindState!=="object") d.__remindState={fired:{},queue:[]};
+  if(!d.__remindState.fired) d.__remindState.fired={};
+  if(!Array.isArray(d.__remindState.queue)) d.__remindState.queue=[];
+  if(Array.isArray(d.remind)&&d.remind.some(x=>x&&x.type==="quick"&&x.done===true)){ const dq=d.remind.filter(x=>x&&x.type==="quick"&&x.done===true); d.remind=d.remind.filter(x=>!(x&&x.type==="quick"&&x.done===true)); }
+  const __alive=new Map((d.remind||[]).map(x=>[x.id,x]));
+  d.__remindState.queue=d.__remindState.queue.filter(q=>q&&((q.snooze&&String(q.id||"").indexOf("s-")===0)||(q.id!=null&&__alive.get(q.id)&&+__alive.get(q.id).quick>0)));
+  return d;
+}
 let data = store.load();
+ensureV2M(data);
 if(autoTrend()) store.saveLocal();   // v1.3 趋势分每日自动记录
 let view = "home";            // home | insight | <moduleKey>
 const EMPTY_HINTS={todo:"先把今天要做的 2-3 件事写下来，完成一条勾一条",checkin:"创建一个想坚持的小习惯，每天来打一次卡",read:"选一本书或一门课，从第一页开始推进",money:"记下第一笔收支，坚持一周就能看到趋势",note:"随手写下第一条想法、灵感或摘录",remind:"设置一条生日 / 纪念日 / 节假日提醒，重要日子不遗漏",focus:"开启一个 25 分钟专注，看今天能攒下几颗番茄",profile:"完善昵称与个性签名，让工作台更有你的味道",mood:"给今天的心情打个 1-5 分，记录此刻状态",health:"记录今天的饮水 / 步数 / 睡眠，养成小习惯"};
@@ -1328,7 +1489,7 @@ function renderHome(){
 
   // pinned tasks (置顶) — 跨模块收集 item.pinned；就地交互，不跳转
   const pins=[];
-  CONFIG.modules.forEach(m=>(data[m.key]||[]).forEach(x=>{ if(x.pinned) pins.push({m,x}); }));
+  CONFIG.modules.forEach(m=>{ if(Array.isArray(data[m.key])) data[m.key].forEach(x=>{ if(x&&x.pinned) pins.push({m,x}); }); });
   const chkMark=icon("check",13,2.6);
   const pinSub=(m,x)=>{
     if(m.type==="checkin") return `${m.name} · 连续 ${streak(x.log)} 天`;
@@ -1500,7 +1661,7 @@ function wireHome(){
 function renderInsight(){
   // 模块完成度柱状条
   const DONUT_COLORS=["var(--module-4)","var(--module-3)","var(--module-5)","var(--module-2)","var(--module-1)","var(--danger)","var(--text-tertiary)"];
-  const bars = CONFIG.modules.map(m=>{
+  const bars = CONFIG.modules.filter(m=>Array.isArray(data[m.key])).map(m=>{
     const it=data[m.key]||[]; let pct=0, label="";
     if(m.type==="todo"){ const d=it.filter(x=>x.done).length; pct=it.length?Math.round(d/it.length*100):0; label=`${d}/${it.length}`; }
     else if(m.type==="checkin"){ const t=today(); const d=it.filter(x=>x.log&&x.log[t]).length; pct=it.length?Math.round(d/it.length*100):0; label=`${d}/${it.length}`; }
@@ -1570,15 +1731,467 @@ function renderModule(key){
     const todayN=it.filter(x=>x.date===t).length;
     head=headHero(m, `${it.length}`, `条记录 · 今日 ${todayN} 条`, null);
   }
+  if(m.type==="mood") return renderMoodM();
+  if(m.type==="focus") return renderFocusM();
+  if(m.type==="health") return renderHealthM();
+  if(m.type==="remind") return renderRemindM();
+  if(m.type==="profile") return renderProfileM();
   if(m.type==="checkin") extra=renderCalendar(m,it);
-  const body = it.length ? it.map(x=>recHTML(m,x)).join("")
+  const genericBody = it.length ? it.map(x=>recHTML(m,x)).join("")
     : `<div class="empty"><span class="e">${icon(m.icon,26)}</span><div>还没有${m.name}记录</div><div style="font-size:12.5px;color:var(--text-tertiary);margin-top:6px">${EMPTY_HINTS[m.key]||'点上方「新建」添加第一条吧'}</div></div>`;
+  const isList=!["mood","focus","health","remind","profile"].includes(m.type);
   $("#screen").innerHTML = `<div class="greet reveal"><div><h1>${m.name}</h1><p>${m.desc}</p></div>
-      <button class="add" id="btn-add">${icon("plus",16,2.2)}新建</button></div>
+      ${isList?`<button class="add" id="btn-add">${icon("plus",16,2.2)}新建</button>`:""}</div>
     <div style="margin-top:16px">${head}${extra}
-      <div class="sec-title">记录</div>${body}</div>`;
-  wireModule(key);
+      ${isList?`<div class="sec-title">记录</div>${genericBody}`:""}</div>`;
+  if(isList) wireModule(key);
 }
+
+/* ============ 5 个新模块专属视图：心情 / 番茄 / 健康 / 提醒 / 资料（数据模型与桌面版一致，双端同步无损） ============ */
+
+/* ---------- 心情追踪：每日 1-5 打分 + 情绪标签 + 近 7 天柱状趋势 ---------- */
+function moodUI(){
+  const mood=data.__mood=data.__mood||{};
+  const t=today();
+  const todayEntry=mood[t]||{score:0,tag:""};
+  const moodTags=["疲惫","低落","平静","愉悦","兴奋"];
+  const moodEmojis=["😮‍💨","😔","😌","😊","🤩"];
+  const moodColors=["#9ca3af","#c084fc","#60a5fa","#34d399","#f59e0b"];
+  const days=[]; for(let i=6;i>=0;i--) days.push(daysAgo(i));
+  const weekData=days.map(d=>({d,e:mood[d]||null}));
+  const hasWeek=weekData.some(w=>w.e&&w.e.score>0);
+  const bars=weekData.map(w=>{
+    const s=w.e&&w.e.score?w.e.score:0; const h=s*16;
+    const col=s?moodColors[s-1]:"transparent";
+    return `<div style="display:flex;flex-direction:column;align-items:center;gap:4px">
+      <div style="width:24px;height:70px;background:var(--surface-nested);border-radius:6px;display:flex;align-items:flex-end;justify-content:center;overflow:hidden">
+        <div style="width:100%;height:${h}px;background:${col};border-radius:4px;transition:height .3s"></div></div>
+      <span style="font-size:10px;color:var(--text-tertiary)">${"日一二三四五六"[new Date(w.d+"T00:00:00").getDay()]}</span>
+      ${w.e&&w.e.tag?`<span style="font-size:12px">${moodEmojis[moodTags.indexOf(w.e.tag)]||"😊"}</span>`:`<span style="font-size:12px;opacity:.2">•</span>`}
+    </div>`; }).join("");
+  const avgWeek=hasWeek?Math.round(weekData.reduce((a,w)=>a+(w.e?.score||0),0)/weekData.filter(w=>w.e?.score).length):0;
+  const entries=Object.entries(mood).filter(([,v])=>v&&v.score>0).sort((a,b)=>b[0].localeCompare(a[0])).slice(0,14);
+  const head=`<div class="hero" style="background:var(--surface-card);border:1px solid var(--border)">
+    <div class="hero-ic" style="background:var(--surface-nested);color:#e0954f">${icon("smile",20)}</div>
+    <div style="flex:1;min-width:0"><div class="hero-tx"><span class="hero-v" style="font-size:22px">${todayEntry.score?todayEntry.score+" 分":"未打分"}</span>
+    <span class="hero-l">${todayEntry.tag?moodEmojis[moodTags.indexOf(todayEntry.tag)]+" "+todayEntry.tag:"今天的心情如何？"}</span></div></div>
+  </div>`;
+  const scoreRow=`<div class="rec" style="background:var(--surface-card);border:1px solid var(--border)">
+    <div style="font-size:13px;font-weight:800;margin-bottom:10px">${icon("smile",15)} 今日打分</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${[1,2,3,4,5].map(sc=>`<button class="js-mood-score" data-s="${sc}" style="width:40px;height:40px;font-size:17px;font-weight:800;border:2px solid ${sc<=todayEntry.score?"var(--accent)":"var(--border)"};background:${sc<=todayEntry.score?"var(--accent-muted)":"var(--surface-card)"};color:${sc<=todayEntry.score?"var(--accent)":"var(--text-tertiary)"};border-radius:12px;cursor:pointer">${sc}</button>`).join("")}
+    </div>
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:12px">
+      ${moodTags.map((tag,i)=>`<button class="js-mood-tag" data-tag="${tag}" style="padding:6px 12px;font-size:12px;font-weight:700;border:1.5px solid ${todayEntry.tag===tag?moodColors[i]:"var(--border)"};background:${todayEntry.tag===tag?moodColors[i]+"22":"var(--surface-card)"};color:${todayEntry.tag===tag?moodColors[i]:"var(--text-secondary)"};border-radius:20px;cursor:pointer">${moodEmojis[i]} ${tag}</button>`).join("")}
+    </div>
+  </div>`;
+  const weekRow=`<div class="rec" style="background:var(--surface-card);border:1px solid var(--border);margin-top:14px">
+    <div style="font-size:13px;font-weight:800;margin-bottom:6px">${icon("chart",15)} 近 7 天趋势</div>
+    <div style="display:flex;gap:8px;justify-content:space-around;padding:10px 0 4px">${hasWeek?bars:`<div style="color:var(--text-tertiary);font-size:12px;width:100%;text-align:center">暂无记录 · 每天来打一次分吧</div>`}</div>
+    ${hasWeek?`<div style="font-size:11.5px;color:var(--text-tertiary);text-align:center;padding-top:4px">本周平均 <b style="color:#e0954f;font-size:14px">${avgWeek}</b> / 5</div>`:""}
+  </div>`;
+  const histRow=entries.length?`<div class="sec-title">历史记录</div>`+entries.map(([date,v])=>`<div class="rec" style="background:var(--surface-card);border:1px solid var(--border)">
+    <div style="display:flex;align-items:center;justify-content:space-between">
+      <span style="font-size:13px;color:var(--text-secondary)">${date} <span style="font-size:15px;margin-left:4px">${moodEmojis[moodTags.indexOf(v.tag)]||"😊"}</span></span>
+      <span style="font-weight:800;font-size:14px;color:${moodColors[v.score-1]||"var(--text)"}">${v.score} 分${v.tag?" · "+v.tag:""}</span>
+    </div></div>`).join(""):"";
+  return {head,body:scoreRow+weekRow,hist:histRow,t,todayEntry,moodTags,moodEmojis,moodColors};
+}
+function renderMoodM(){
+  const M=moodUI();
+  $("#screen").innerHTML=`<div class="greet reveal"><div><h1>${modOf("mood").name}</h1><p>${modOf("mood").desc}</p></div></div>
+    <div style="margin-top:16px">${M.head}${M.body}${M.hist}</div>`;
+  $("#screen").querySelectorAll(".js-mood-score").forEach(b=>b.onclick=()=>{
+    const sc=+b.dataset.s;
+    data.__mood[M.t]={...(data.__mood[M.t]||{}),score:sc};
+    store.save(); renderMoodM();
+  });
+  $("#screen").querySelectorAll(".js-mood-tag").forEach(b=>b.onclick=()=>{
+    const tag=b.dataset.tag; const cur=data.__mood[M.t]||{score:0};
+    if(cur.tag===tag) delete cur.tag; else cur.tag=tag;
+    data.__mood[M.t]=cur;
+    store.save(); renderMoodM();
+  });
+}
+
+/* ---------- 番茄专注：计时器 + 今日战绩 + 时长设置 ---------- */
+function focusStatsHM(){
+  const T=pomoToday(), P=data.__pomo;
+  const goal=data.focus.goal||8;
+  const pct=Math.min(100,Math.round(T.count/goal*100));
+  return `<div class="rec" style="background:var(--surface-card);border:1px solid var(--border);margin-top:14px">
+    <div style="font-size:13px;font-weight:800;margin-bottom:10px">${icon("chart",15)} 今日战绩</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px">
+      <div class="mini"><div class="l">今日番茄</div><div class="v" id="f-tc">${T.count}</div><div class="s">目标 ${goal} 个</div></div>
+      <div class="mini"><div class="l">今日专注</div><div class="v" id="f-tm">${T.min}<span style="font-size:11px;font-weight:400"> 分钟</span></div><div class="s">累计 ${P.total.count} 个 · ${P.total.min} 分</div></div>
+    </div>
+    <div style="height:7px;background:var(--surface-nested);border-radius:99px;overflow:hidden;margin-top:10px"><div id="f-goalbar" style="height:100%;width:${pct}%;background:var(--accent);border-radius:99px;transition:width .4s"></div></div>
+    <div style="font-size:11.5px;color:var(--text-tertiary);margin-top:6px;display:flex;justify-content:space-between">
+      <span>今日目标完成 <b id="f-goalpct" style="color:var(--text)">${pct}%</b></span><span>累计 <b id="f-totc" style="color:var(--text)">${P.total.count}</b> 个 · <b id="f-totm" style="color:var(--text)">${P.total.min}</b> 分钟</span></div>
+  </div>
+  <div class="rec" style="background:var(--surface-card);border:1px solid var(--border);margin-top:14px">
+    <div style="font-size:13px;font-weight:800;margin-bottom:10px">${icon("timer",15)} 时长设置</div>
+    <div style="font-size:12px;color:var(--text-secondary);margin-bottom:6px">预设方案</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${[["经典",25,5],["短频",15,3],["深度",52,17],["中长",45,15]].map(([nm,f,b])=>`<button class="js-focus-preset ${data.focus.focusMin===f&&data.focus.breakMin===b?'':'dimg'}" data-f="${f}" data-b="${b}" style="${data.focus.focusMin===f&&data.focus.breakMin===b?"background:var(--accent);color:var(--on-accent);border-color:var(--accent)":""}padding:6px 12px;font-size:12px;font-weight:700;border:1px solid var(--border-input);border-radius:8px;background:var(--surface-card);color:var(--text-secondary);cursor:pointer">${nm} ${f}/${b}</button>`).join("")}
+    </div>
+    <div style="font-size:12px;color:var(--text-secondary);margin:12px 0 6px">专注分钟</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${[25,30,45,60].map(v=>`<button class="js-focus-set js-fs-focus ${data.focus.focusMin===v?'':'dimg'}" data-v="${v}" style="${data.focus.focusMin===v?"background:var(--accent);color:var(--on-accent);border-color:var(--accent)":""}padding:6px 12px;font-size:12px;font-weight:700;border:1px solid var(--border-input);border-radius:8px;background:var(--surface-card);color:var(--text-secondary);cursor:pointer">${v} 分</button>`).join("")}</div>
+    <div style="font-size:12px;color:var(--text-secondary);margin:12px 0 6px">休息分钟</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${[5,10,15].map(v=>`<button class="js-focus-set js-fs-break ${data.focus.breakMin===v?'':'dimg'}" data-v="${v}" style="${data.focus.breakMin===v?"background:var(--accent);color:var(--on-accent);border-color:var(--accent)":""}padding:6px 12px;font-size:12px;font-weight:700;border:1px solid var(--border-input);border-radius:8px;background:var(--surface-card);color:var(--text-secondary);cursor:pointer">${v} 分</button>`).join("")}</div>
+    <div style="font-size:12px;color:var(--text-secondary);margin:12px 0 6px">每日目标</div>
+    <div style="display:flex;gap:8px;flex-wrap:wrap">
+      ${[4,6,8,12].map(v=>`<button class="js-focus-set js-fs-goal ${data.focus.goal===v?'':'dimg'}" data-v="${v}" style="${data.focus.goal===v?"background:var(--accent);color:var(--on-accent);border-color:var(--accent)":""}padding:6px 12px;font-size:12px;font-weight:700;border:1px solid var(--border-input);border-radius:8px;background:var(--surface-card);color:var(--text-secondary);cursor:pointer">${v} 个</button>`).join("")}</div>
+    <div style="font-size:11px;color:var(--text-tertiary);margin-top:12px;line-height:1.6">完成一个专注后自动进入休息倒计时，休息结束自动切回专注，页面开着就会连续作战��响铃提醒。</div>
+  </div>`;
+}
+function focusUI(){
+  const isBreak=pomo.mode==="break";
+  const c=2*Math.PI*64;
+  const timerCard=`<div class="rec" style="background:var(--surface-card);border:1px solid var(--border);text-align:center;padding:20px 14px">
+    <div style="font-size:12px;color:var(--text-tertiary);margin-bottom:12px">${isBreak?"☕ 休息中":"🍅 专注模式 · "+(data.focus.focusMin||25)+" 分钟"}</div>
+    <div style="position:relative;width:148px;height:148px;margin:0 auto">
+      <svg viewBox="0 0 150 150" style="width:148px;height:148px"><circle cx="75" cy="75" r="64" fill="none" stroke="var(--border)" stroke-width="9"/><circle id="pomo-fg" cx="75" cy="75" r="64" fill="none" stroke="${isBreak?"var(--module-1)":"var(--accent)"}" stroke-width="9" stroke-linecap="round" stroke-dasharray="${c.toFixed(1)}" stroke-dashoffset="0" style="transform:rotate(-90deg);transform-origin:75px 75px;transition:stroke-dashoffset 1s linear"/></svg>
+      <div style="position:absolute;inset:0;display:grid;place-items:center"><div style="text-align:center">
+        <div id="pomo-time" style="font-size:32px;font-weight:800;letter-spacing:-.03em;font-family:ui-monospace,Menlo,Consolas,monospace">${pad2(Math.floor(pomo.remain/60))}:${pad2(pomo.remain%60)}</div>
+        <div id="pomo-status" style="font-size:11.5px;color:var(--text-tertiary);margin-top:2px">${pomo.running?(isBreak?"休息中":"专注中"):"已暂停"}</div>
+      </div></div>
+    </div>
+    <div style="display:flex;gap:10px;justify-content:center;margin-top:14px">
+      <button id="pomo-toggle" style="border:none;background:var(--accent);color:var(--on-accent);border-radius:10px;padding:11px 30px;font-size:14px;font-weight:800;cursor:pointer">开始</button>
+      <button id="pomo-reset" style="border:1px solid var(--border-input);background:var(--surface-card);color:var(--text-secondary);border-radius:10px;padding:11px 20px;font-size:14px;font-weight:600;cursor:pointer">重置</button>
+    </div>
+  </div>`;
+  return {head:timerCard,body:focusStatsHM()};
+}
+function renderFocusM(){
+  const F=focusUI();
+  $("#screen").innerHTML=`<div class="greet reveal"><div><h1>${modOf("focus").name}</h1><p>${modOf("focus").desc}</p></div></div>
+    <div style="margin-top:16px">${F.head}${F.body}</div>`;
+  $("#pomo-toggle").onclick=()=>{ pomo.running=!pomo.running; startPomoHeart(); pomoUpdate(); };
+  $("#pomo-reset").onclick=()=>{ pomo.running=false; pomo.remain=pomo.total; pomoUpdate(); };
+  $("#screen").querySelectorAll(".js-focus-set").forEach(b=>b.onclick=()=>{
+    const v=+b.dataset.v;
+    if(b.classList.contains("js-fs-focus")) data.focus.focusMin=v;
+    else if(b.classList.contains("js-fs-break")) data.focus.breakMin=v;
+    else data.focus.goal=v;
+    if(!pomo.running){ pomo.total=(pomo.mode==="break"?data.focus.breakMin:data.focus.focusMin)*60; pomo.remain=pomo.total; }
+    store.save(); renderFocusM();
+  });
+  $("#screen").querySelectorAll(".js-focus-preset").forEach(b=>b.onclick=()=>{
+    data.focus.focusMin=+b.dataset.f; data.focus.breakMin=+b.dataset.b;
+    if(!pomo.running){ pomo.mode="focus"; pomo.total=data.focus.focusMin*60; pomo.remain=pomo.total; }
+    store.save(); renderFocusM(); toast(`已切换「${b.dataset.f}/${b.dataset.b}」方案`);
+  });
+  pomoUpdate();
+}
+
+/* ---------- 健康追踪：饮水 / 步数 / 睡眠 + 周图 ---------- */
+function healthUI(){
+  const h=data.__health=data.__health||{};
+  const t=today();
+  const todayH=h[t]||{water:0,steps:0,sleep:0};
+  const goals=h.goals=h.goals||{water:8,steps:8000,sleep:8};
+  const days=[]; for(let i2=6;i2>=0;i2--) days.push(daysAgo(i2));
+  const wk=days.map(d=>({d,e:(h[d]&&typeof h[d]==="object")?h[d]:{}}));
+  const barRow=(label,val,goal,unit,col)=>{
+    const pc=Math.min(100,Math.round(val/goal*100));
+    return `<div style="margin-bottom:12px">
+      <div style="display:flex;justify-content:space-between;font-size:12px;margin-bottom:5px">
+        <span style="font-weight:700;color:var(--text-secondary)">${label}</span>
+        <span style="color:${col};font-weight:800">${val} / ${goal}${unit}${pc>=100?" ✓":""}</span></div>
+      <div style="height:7px;background:var(--surface-nested);border-radius:4px;overflow:hidden">
+        <div style="height:100%;width:${pc}%;background:${col};border-radius:4px;transition:width .4s"></div></div></div>`;};
+  const weekChart=(get,col)=>{
+    const safe=d=>(h[d]&&typeof h[d]==="object")?h[d]:{};
+    const max=Math.max(...days.map(d=>get(safe(d))||0),1);
+    return days.map(d=>{
+      const v=get(safe(d))||0; const hgt=Math.round(v/max*64);
+      return `<div style="display:flex;flex-direction:column;align-items:center;gap:3px">
+        <div style="width:18px;height:64px;background:var(--surface-nested);border-radius:4px;display:flex;align-items:flex-end;overflow:hidden">
+          <div style="width:100%;height:${hgt}px;background:${v?col:"transparent"};border-radius:3px"></div></div>
+        <span style="font-size:9.5px;color:var(--text-tertiary)">${"日一二三四五六"[new Date(d+"T00:00:00").getDay()]}</span></div>`;}).join("");
+  };
+  const todayBlock=`<div class="rec" style="background:var(--surface-card);border:1px solid var(--border)">
+    <div style="font-size:13px;font-weight:800;margin-bottom:12px">${icon("heart",15)} 今日进度</div>
+    ${barRow("💧 饮水",todayH.water||0,goals.water,"杯","#5a8fb5")}
+    ${barRow("👟 步数",todayH.steps||0,goals.steps,"步","#3a9d8f")}
+    ${barRow("😴 睡眠",todayH.sleep||0,goals.sleep,"小时","#8a6db1")}
+    <div style="display:flex;gap:8px;margin-top:12px;flex-wrap:wrap">
+      <button class="js-h-inc" data-k="water" data-v="1" style="padding:7px 12px;font-size:12px;font-weight:700;border:1.5px solid #5a8fb5;border-radius:8px;background:#5a8fb51a;color:#5a8fb5;cursor:pointer">+1 杯水</button>
+      <button class="js-h-inc" data-k="steps" data-v="1000" style="padding:7px 12px;font-size:12px;font-weight:700;border:1.5px solid #3a9d8f;border-radius:8px;background:#3a9d8f1a;color:#3a9d8f;cursor:pointer">+1000 步</button>
+      <button class="js-h-inc" data-k="sleep" data-v="1" style="padding:7px 12px;font-size:12px;font-weight:700;border:1.5px solid #8a6db1;border-radius:8px;background:#8a6db11a;color:#8a6db1;cursor:pointer">+1 小时睡眠</button>
+    </div>
+    <div style="font-size:11px;color:var(--text-tertiary);margin-top:12px">
+      目标：<input id="h-goal-w" type="number" value="${goals.water}" style="width:40px;font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;text-align:center"> 杯 ·
+      <input id="h-goal-s" type="number" value="${goals.steps}" style="width:56px;font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;text-align:center"> 步 ·
+      <input id="h-goal-l" type="number" value="${goals.sleep}" style="width:40px;font-size:11px;padding:2px 4px;border:1px solid var(--border);border-radius:4px;text-align:center"> 小时
+      <button id="h-goal-save" style="font-size:11px;padding:3px 8px;cursor:pointer">保存目标</button>
+    </div>
+  </div>`;
+  const chartBlock=`<div class="rec" style="background:var(--surface-card);border:1px solid var(--border);margin-top:14px">
+    <div style="font-size:13px;font-weight:800;margin-bottom:6px">${icon("chart",15)} 近 7 天 · 饮水</div>
+    <div style="display:flex;gap:6px;justify-content:space-around;padding:8px 0">${weekChart(e=>e.water||0,"#5a8fb5")}</div>
+  </div>
+  <div class="rec" style="background:var(--surface-card);border:1px solid var(--border);margin-top:14px">
+    <div style="font-size:13px;font-weight:800;margin-bottom:6px">${icon("chart",15)} 近 7 天 · 步数</div>
+    <div style="display:flex;gap:6px;justify-content:space-around;padding:8px 0">${weekChart(e=>e.steps||0,"#3a9d8f")}</div>
+  </div>
+  <div class="rec" style="background:var(--surface-card);border:1px solid var(--border);margin-top:14px">
+    <div style="font-size:13px;font-weight:800;margin-bottom:10px">${icon("chart",15)} 周统计</div>
+    <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-secondary)"><span>平均饮水</span><b style="color:#5a8fb5">${(wk.reduce((a,w)=>a+(w.e.water||0),0)/7).toFixed(1)} 杯/天</b></div>
+    <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-secondary);margin-top:6px"><span>平均步数</span><b style="color:#3a9d8f">${Math.round(wk.reduce((a,w)=>a+(w.e.steps||0),0)/7)}</b></div>
+    <div style="display:flex;justify-content:space-between;font-size:12.5px;color:var(--text-secondary);margin-top:6px"><span>达标天数</span><b>${wk.filter(w=>(w.e.water||0)>=goals.water&&(w.e.steps||0)>=goals.steps).length} / 7</b></div>
+  </div>`;
+  return {head:todayBlock,body:chartBlock,t,goals};
+}
+function renderHealthM(){
+  const H=healthUI();
+  $("#screen").innerHTML=`<div class="greet reveal"><div><h1>${modOf("health").name}</h1><p>${modOf("health").desc}</p></div></div>
+    <div style="margin-top:16px">${H.head}${H.body}</div>`;
+  const inc=(k,step)=>{ data.__health[H.t]=data.__health[H.t]||{}; data.__health[H.t][k]=(data.__health[H.t][k]||0)+step; store.save(); renderHealthM(); };
+  $("#screen").querySelectorAll(".js-h-inc").forEach(b=>b.onclick=()=>inc(b.dataset.k,+b.dataset.v));
+  $("#h-goal-save").onclick=()=>{
+    const g={water:Math.max(1,+$("#h-goal-w").value||8),steps:Math.max(0,+$("#h-goal-s").value||8000),sleep:Math.max(0,+$("#h-goal-l").value||8)};
+    data.__health.goals=g; store.save(); renderHealthM(); toast("健康目标已保存");
+  };
+}
+
+/* ---------- 提醒中心：快捷条 + 分组列表 + 新建/编辑弹窗 + 节假日速览 ---------- */
+function remMetaM(it){
+  if(it.type==="alarm"){ const rep=it.repeat||"daily";
+    return (rep==="daily"?"每天":rep==="weekdays"?"工作日":rep==="weekly"?"每周":("仅 "+(it.date||"")))+" "+(it.time||"")+((+it.ahead>0)?(" · 提前 "+it.ahead+" 天"):"")+(+it.quick>0?(" · "+QUICK_LABEL[it.quick]):""); }
+  if(it.type==="birthday"||it.type==="anniv"){ const md=String(it.date||"").slice(5);
+    return "每年 "+(it.date||"")+((+it.ahead>0)?(" · 提前 "+it.ahead+" 天"):"")+(md.length===5?(" · 距今 "+Math.max(0,daysToMd(md))+" 天"):""); }
+  if(it.type==="quick"){ const left=Math.max(0,Math.round((+it.at-Date.now())/60000)); return "约 "+(left>=1?left+" 分钟后":"1 分钟内")+"提醒"; }
+  return "";
+}
+function remCardM(it){
+  const tint=it.type==="alarm"?"#f2eef0":it.type==="birthday"?"#f6efe6":it.type==="anniv"?"#f6ece9":"#eef3ec";
+  const ic=it.type==="alarm"?"bell":it.type==="birthday"?"heart":it.type==="anniv"?"calendar":"timer";
+  return `<div class="rec" style="background:var(--surface-card);border:1px solid var(--border);${it.enabled===false||it.done?"opacity:.5":""}">
+    <div style="display:flex;align-items:center;gap:10px">
+      <span style="width:34px;height:34px;border-radius:9px;background:${tint};color:var(--accent);display:grid;place-items:center;flex:0 0 auto">${icon(ic,17)}</span>
+      <div style="flex:1;min-width:0">
+        <div style="font-weight:700;font-size:13.5px">${esc(it.title||"未命名提醒")}${it.group?`<span style="font-size:10px;font-weight:600;color:var(--accent);background:var(--accent-muted);border-radius:4px;padding:1px 6px;margin-left:5px">${esc(it.group)}</span>`:""}</div>
+        <div style="font-size:11.5px;color:var(--text-secondary);margin-top:2px">${remMetaM(it)}${it.note?(" · "+esc(it.note)):""}</div>
+      </div>
+      <input type="checkbox" class="js-rem-toggle" data-id="${it.id}" ${it.enabled!==false&&!it.done?"checked":""} style="width:18px;height:18px;accent-color:var(--accent);cursor:pointer">
+      <button class="js-rem-edit" data-id="${it.id}" style="border:none;background:var(--surface-nested);color:var(--text-secondary);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer">编辑</button>
+      <button class="js-rem-del" data-id="${it.id}" style="border:none;background:var(--danger-muted);color:var(--danger);border-radius:6px;padding:4px 8px;font-size:11px;cursor:pointer">删</button>
+    </div></div>`;
+}
+function remindUI(){
+  const st=data.__remindState; const t=today();
+  const dow=new Date().getDay();
+  const muted=remMutedM();
+  const hi=holidayInfo(t);
+  const dayType=hi?(hi.type==="off"?"假期 · "+hi.name:hi.name):(dow===0||dow===6)?"周末休息":"工作日";
+  const list=data.remind||[];
+  const active=list.filter(x=>x.enabled!==false&&!x.done);
+  const allGroups=[...new Set(list.filter(x=>x.group).map(x=>x.group))];
+  const remGroupFilter=data.__remGroupFilter||"";
+  const filtList=remGroupFilter?list.filter(x=>x.group===remGroupFilter):list;
+  const alarms=filtList.filter(x=>x.type==="alarm");
+  const days=filtList.filter(x=>x.type==="birthday"||x.type==="anniv");
+  const quicks=filtList.filter(x=>x.type==="quick"&&!x.done);
+  const holiRows=Object.keys(HOLIDAY_2026.off).reduce((acc,md)=>{ const nm=HOLIDAY_2026.off[md]; const last=acc[acc.length-1];
+    if(last&&last.name===nm) last.md2=md; else acc.push({name:nm,md1:md,md2:md}); return acc; },[]);
+  const holiHTML=holiRows.map(r=>`<div style="display:flex;justify-content:space-between;font-size:12px;padding:5px 0;border-bottom:1px dashed var(--border)"><b style="color:var(--text)">${r.name}</b><span style="color:var(--text-tertiary)">${r.md1.replace("-","/")} ~ ${r.md2.replace("-","/")}</span></div>`).join("");
+
+  const head=`<div class="mod-summary">
+    <div class="mini"><div class="l">今天</div><div class="v" style="font-size:15px">${dayType}</div></div>
+    <div class="mini"><div class="l">生效提醒</div><div class="v">${active.length}</div></div>
+    <div class="mini"><div class="l">反复中</div><div class="v">${st.queue.length}</div></div>
+  </div>`;
+  const quickRow=`<div class="rec" style="background:var(--surface-card);border:1px solid var(--border)">
+    <div style="font-size:13px;font-weight:800;margin-bottom:10px">快捷提醒</div>
+    <input id="rm-qk-note" placeholder="提醒我做什么？（可选）" style="width:100%;padding:8px 10px;font-size:12.5px;border:1.5px solid var(--border-input);border-radius:8px;background:var(--surface-card);color:var(--text)">
+    <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+      ${QUICK_OPTS.map(o=>`<button class="js-rem-qk" data-m="${o.m}" style="padding:6px 11px;font-size:11.5px;font-weight:700;border:1px solid var(--border-input);border-radius:999px;background:var(--surface-card);color:var(--text-secondary);cursor:pointer">${o.l}后</button>`).join("")}</div>
+    <div style="display:flex;align-items:center;gap:8px;margin-top:10px">
+      <button id="rm-mute" style="padding:6px 11px;font-size:11.5px;font-weight:700;border:1px solid var(--border-input);border-radius:999px;background:var(--surface-card);color:var(--text-secondary);cursor:pointer">${muted?"🔔 恢复提醒":"🔕 暂停提醒"}</button>
+      ${muted?"<span style='font-size:10.5px;color:var(--accent);font-weight:600'>已暂停 · 到期自动恢复</span>":""}
+    </div>
+  </div>`;
+  const grpRow=allGroups.length?`<div style="display:flex;gap:6px;flex-wrap:wrap;margin:14px 0 8px">
+    <button class="js-rem-grp" data-g="" style="font-size:11px;padding:3px 10px;cursor:pointer;${remGroupFilter===""?"background:var(--accent);color:var(--on-accent);border-color:var(--accent)":""}border:1px solid var(--border-input);border-radius:999px;background:var(--surface-card)">全部</button>
+    ${allGroups.map(g=>`<button class="js-rem-grp" data-g="${attr(g)}" style="font-size:11px;padding:3px 10px;cursor:pointer;${remGroupFilter===g?"background:var(--accent);color:var(--on-accent);border-color:var(--accent)":""}border:1px solid var(--border-input);border-radius:999px;background:var(--surface-card)">${esc(g)}</button>`).join("")}</div>`:"";
+  const listsRow=
+    (alarms.length?`<div class="sec-title">闹铃</div>`+alarms.map(remCardM).join(""):"")+
+    (days.length?`<div class="sec-title">生日 · 纪念日</div>`+days.map(remCardM).join(""):"")+
+    (quicks.length?`<div class="sec-title">快捷提醒</div>`+quicks.map(remCardM).join(""):"")+
+    (!list.length?`<div class="empty"><span class="e">${icon("bell",26)}</span><div>还没有提醒</div><div style="font-size:12px;color:var(--text-tertiary);margin-top:5px">点上方「新建」或用快捷条一键设置倒计时</div></div>`:"");
+  const holiRow=`<div class="rec" style="background:var(--surface-card);border:1px solid var(--border);margin-top:14px">
+    <div style="font-size:13px;font-weight:800;margin-bottom:8px">${icon("calendar",15)} 2026 节假日速览</div>
+    ${holiHTML}
+    <div style="font-size:10.5px;color:var(--text-tertiary);margin-top:8px">节假日当天 08:00 自动响铃；调休上班日也会提醒。</div>
+  </div>`;
+  return {head,quickRow,grpRow,listsRow,holiRow,muted};
+}
+function openRemindEditorM(id){
+  const it=id!=null?(data.remind||[]).find(x=>x.id==id)||{}:{};
+  const overlay=document.createElement("div"); overlay.className="overlay";
+  const optQuick='<option value="0">不反复</option>'+QUICK_OPTS.map(o=>'<option value="'+o.m+'">'+o.l+'</option>').join("");
+  overlay.innerHTML=`<div class="modal"><div class="grab"></div>
+    <h2>${id!=null?"编辑提醒":"新建提醒"}</h2><div class="sub">闹铃 / 生日 / 纪念日 / 快捷倒计时，与桌面端同步</div>
+    <div class="field"><label>类型</label><select id="rm-type" style="width:100%">
+      <option value="alarm" ${it.type==="alarm"?"selected":""}>闹铃（定时响铃）</option>
+      <option value="birthday" ${it.type==="birthday"?"selected":""}>生日（每年提醒）</option>
+      <option value="anniv" ${it.type==="anniv"?"selected":""}>纪念日 / 周年</option>
+      <option value="quick" ${it.type==="quick"?"selected":""}>快捷提醒（N 分钟后）</option></select></div>
+    <div class="field"><label>标题</label><input id="rm-title" value="${attr(it.title||"")}" placeholder="例如：起来活动 / 妈妈生日"></div>
+    <div class="field rm-f-time" ${it.type==="quick"?"style='display:none'":""}><label>响铃时间</label><input id="rm-time" type="time" value="${attr(it.time||"09:00")}"></div>
+    <div class="field rm-f-repeat" ${it.type!=="alarm"?"style='display:none'":""}><label>重复</label><select id="rm-repeat" style="width:100%">
+      <option value="daily" ${(it.repeat||"daily")==="daily"?"selected":""}>每天</option>
+      <option value="weekdays" ${it.repeat==="weekdays"?"selected":""}>工作日（一至五）</option>
+      <option value="once" ${it.repeat==="once"?"selected":""}>仅一次</option>
+      <option value="weekly" ${it.repeat==="weekly"?"selected":""}>每周（同一星期几）</option>
+      <option value="monthly" ${it.repeat==="monthly"?"selected":""}>每月（同日）</option></select></div>
+    <div class="field rm-f-date" ${it.type==="quick"?"style='display:none'":""}><label>日期</label><input id="rm-date" type="date" value="${attr(it.date||today())}"></div>
+    <div class="field rm-f-ahead" ${it.type!=="birthday"&&it.type!=="anniv"?"style='display:none'":""}><label>提前提醒</label><select id="rm-ahead" style="width:100%">
+      <option value="0" ${it.ahead==0?"selected":""}>仅当天</option><option value="1" ${it.ahead==1?"selected":""}>提前 1 天</option>
+      <option value="3" ${it.ahead==3?"selected":""}>提前 3 天</option><option value="7" ${it.ahead==7?"selected":""}>提前 7 天</option></select></div>
+    <div class="field rm-f-tz" ${it.type==="quick"?"style='display:none'":""}><label>时区</label><select id="rm-tz" style="width:100%">
+      <option value="auto">自动���本地时区）</option>${it.tz&&it.tz!=="auto"?"<option selected>"+it.tz+"</option>":""}
+      ${["GMT+0","GMT+8","GMT-5","GMT-8"].filter(z=>z!==it.tz&&it.tz).map(z=>"<option>"+z+"</option>").join("")}</select></div>
+    <div class="field rm-f-min" ${it.type!=="quick"?"style='display:none'":""}><label>多少分钟后</label><select id="rm-min" style="width:100%">${QUICK_OPTS.map(o=>'<option value="'+o.m+'" '+(it.m===o.m?"selected":"")+">"+o.l+"</option>").join("")}</select></div>
+    <div class="field rm-f-quick" ${it.type==="quick"?"style='display:none'":""}><label>到点后反复</label><select id="rm-quick" style="width:100%">${optQuick}</select></div>
+    <div class="field"><label>备注</label><input id="rm-note" value="${attr(it.note||"")}" placeholder="可选"></div>
+    <div class="field"><label>分组</label><input id="rm-group" value="${attr(it.group||"")}" placeholder="如：值班 / 家庭 / 工作"></div>
+    <div class="modal-actions"><button class="link-danger" id="rm-del" style="${id!=null?"":"visibility:hidden"}">删除</button>
+      <span style="flex:1"></span><button class="btn ghost" id="rm-cancel">取消</button><button class="btn" id="rm-save">保存</button></div></div>`;
+  document.body.appendChild(overlay);
+  const $id=sel=>overlay.querySelector(sel);
+  const syncVis=()=>{
+    const ty=$id("rm-type").value;
+    if($id("rm-time")) $id("rm-time").parentElement.style.display=ty==="alarm"?"":"none";
+    if($id("rm-repeat")) $id("rm-repeat").parentElement.style.display=ty==="alarm"?"":"none";
+    $id("rm-date").parentElement.style.display=(ty==="alarm"&&$id("rm-repeat").value==="once")||ty==="birthday"||ty==="anniv"?"":"none";
+    $id("rm-tz").parentElement.style.display=(ty==="alarm"||ty==="birthday"||ty==="anniv")?"":"none";
+    $id("rm-ahead").parentElement.style.display=(ty==="birthday"||ty==="anniv")?"":"none";
+    $id("rm-min").parentElement.style.display=ty==="quick"?"":"none";
+    $id("rm-quick").parentElement.style.display=ty==="quick"?"none":"";
+  };
+  $id("rm-type").value=it.type||"alarm"; if(it.repeat)$id("rm-repeat").value=it.repeat; if(it.ahead!=null)$id("rm-ahead").value=String(it.ahead); if(it.quick!=null)$id("rm-quick").value=String(it.quick); if(it.m)$id("rm-min").value=String(it.m);
+  $id("rm-type").onchange=syncVis; $id("rm-repeat").onchange=syncVis; syncVis();
+  const close=()=>overlay.remove();
+  overlay.onclick=e=>{ if(e.target===overlay) close(); };
+  $id("rm-cancel").onclick=close;
+  $id("rm-del").onclick=()=>{ close(); confirmDelete("remind",it.id); };
+  $id("rm-save").onclick=()=>{
+    const ty=$id("rm-type").value, title=$id("rm-title").value.trim()||"未命名提醒";
+    const note=$id("rm-note").value.trim(), group=$id("rm-group").value.trim();
+    let item;
+    if(ty==="quick"){ const m=+$id("rm-min").value;
+      item={type:"quick",title:title,at:Date.now()+m*60000,m,quick:+$id("rm-quick").value,enabled:true,note,group};
+    } else {
+      item={type:ty,title,time:$id("rm-time").value||"09:00",date:$id("rm-date").value||today(),
+        repeat:$id("rm-repeat").value||"daily",ahead:+$id("rm-ahead").value,
+        tz:$id("rm-tz").value||"",note,group,enabled:true};
+    }
+    if(id!=null){ Object.assign(it,item,{id:it.id}); }
+    else { item.id=Date.now(); data.remind=data.remind||[]; data.remind.unshift(item); }
+    close(); store.save(); renderRemindM(); toast("提醒已保存");
+  };
+}
+function renderRemindM(){
+  const R=remindUI();
+  $("#screen").innerHTML=`<div class="greet reveal"><div><h1>${modOf("remind").name}</h1><p>${modOf("remind").desc}</p></div>
+      <button class="add" id="rm-new">${icon("plus",16,2.2)}新建</button></div>
+    <div style="margin-top:16px">${R.head}${R.quickRow}${R.grpRow}${R.listsRow}${R.holiRow}</div>`;
+  $("#rm-new").onclick=()=>openRemindEditorM(null);
+  $("#screen").querySelectorAll(".js-rem-qk").forEach(b=>b.onclick=()=>{
+    const m=+b.dataset.m; const note=($("#rm-qk-note").value||"").trim();
+    const item={id:Date.now(),type:"quick",title:note||(m<60?m+" 分钟后提醒":(m/60)+" 小时后提醒"),at:Date.now()+m*60000,m,quick:0,enabled:true};
+    data.remind=data.remind||[]; data.remind.unshift(item); store.save(); toast("已设置："+item.title); renderRemindM();
+  });
+  $("#rm-mute").onclick=()=>{
+    if(remMutedM()){ delete data.__remindState.muted; store.save(); remRingHide(); renderRemindM(); toast("已恢复提醒"); }
+    else{
+      const now=Date.now(); const endOfToday=()=>{ const e=new Date(); e.setHours(23,59,59,999); return e.getTime(); };
+      const nextMorning=()=>{ const e=new Date(); e.setDate(e.getDate()+1); e.setHours(9,0,0,0); return e.getTime(); };
+      const opts=[["暂停 1 小时",now+3600e3],["暂停 2 小时",now+7200e3],["到今晚 24 点",endOfToday()],["到明早 9 点",nextMorning()],["暂停 1 周",now+7*86400e3]];
+      const i=prompt("选择暂停时长（输入序号）：\n"+opts.map((o,i)=>`${i+1}. ${o[0]}`).join("\n"),len=opts.length);
+      if(i==null) return; const k=+i-1; if(k>=0&&k<len){ data.__remindState.muted={until:opts[k][1]}; store.save(); renderRemindM(); toast("提醒已暂停"); }
+    }
+  };
+  $("#screen").querySelectorAll(".js-rem-grp").forEach(b=>b.onclick=()=>{
+    const g=b.dataset.g||"";
+    if(g) data.__remGroupFilter=g; else delete data.__remGroupFilter;
+    store.saveLocal(); renderRemindM();
+  });
+  $("#screen").querySelectorAll(".js-rem-toggle").forEach(el=>el.onchange=()=>{
+    const it=(data.remind||[]).find(x=>x.id==el.dataset.id); if(!it) return;
+    it.enabled=el.checked; if(el.checked) delete it.done;
+    if(!el.checked) data.__remindState.queue=data.__remindState.queue.filter(q=>q.id!=it.id);
+    store.save();
+  });
+  $("#screen").querySelectorAll(".js-rem-edit").forEach(el=>el.onclick=()=>openRemindEditorM(el.dataset.id));
+  $("#screen").querySelectorAll(".js-rem-del").forEach(el=>el.onclick=()=>confirmDelete("remind",el.dataset.id));
+}
+
+/* ---------- 个人信息：资料表单 + 头像 + 生日一键入提醒 ---------- */
+function profileUI(){
+  const p=data.profile=data.profile||{}; const ava=data.__avatar;
+  const initial=(p.nickname||CONFIG.owner||"我").slice(0,1);
+  const hasBday=(p.birthday&&p.birthday.length===10)&&!(data.remind||[]).some(x=>x.type==="birthday"&&x.date===p.birthday);
+  const avaBlock=ava
+    ?`<img src="${attr(ava)}" style="width:72px;height:72px;border-radius:50%;object-fit:cover;border:3px solid var(--surface-card);box-shadow:0 2px 8px rgba(0,0,0,.1)"><br><button id="pf-ava" style="margin-top:8px;font-size:11px;color:var(--text-secondary);background:none;border:none;cursor:pointer">📷 更换头像</button>`
+    :`<div style="width:72px;height:72px;border-radius:50%;background:var(--accent-muted);color:var(--accent);display:grid;place-items:center;font-size:30px;font-weight:800;margin:0 auto">${esc(initial)}</div>
+     <button id="pf-ava" style="margin-top:10px;font-size:11px;color:var(--text-secondary);background:none;border:none;cursor:pointer">📷 上传头像</button>`;
+  const head=`<div class="rec" style="background:var(--surface-card);border:1px solid var(--border);text-align:center;padding:20px 14px">
+    ${avaBlock}
+    <div style="font-size:16px;font-weight:800;margin-top:10px">${esc(p.nickname||CONFIG.owner)}</div>
+    ${p.motto?`<div style="font-size:12px;color:var(--text-tertiary);margin-top:2px">${esc(p.motto)}</div>`:""}
+    <input type="file" id="pf-file" accept="image/*" style="display:none">
+  </div>`;
+  const formBlock=`<div class="rec" style="background:var(--surface-card);border:1px solid var(--border);margin-top:14px">
+    <div style="font-size:13px;font-weight:800;margin-bottom:10px">${icon("user",15)} 基本资料</div>
+    <div class="field"><label>昵称</label><input id="pf-nickname" value="${attr(p.nickname||"")}" placeholder="怎么称呼你"></div>
+    <div class="frow" style="display:flex;gap:8px"><div class="field" style="flex:1"><label>性别</label><select id="pf-gender" style="width:100%"><option value="" ${!p.gender?"selected":""}>保密</option><option value="男" ${p.gender==="男"?"selected":""}>男</option><option value="女" ${p.gender==="女"?"selected":""}>女</option></select></div>
+    <div class="field" style="flex:1"><label>生日</label><input id="pf-birthday" type="date" value="${attr(p.birthday||"")}"></div></div>
+    <div class="field"><label>所在城市</label><input id="pf-city" value="${attr(p.city||"")}" placeholder="例如：北京"></div>
+    <div class="field"><label>手机号</label><input id="pf-phone" value="${attr(p.phone||"")}" placeholder="用于短信触达（可选）"></div>
+    <div class="field"><label>邮箱</label><input id="pf-email" value="${attr(p.email||"")}" placeholder="用于邮件触达（可选）"></div>
+    <div class="field"><label>微信号</label><input id="pf-wechat" value="${attr(p.wechat||"")}" placeholder="可选"></div>
+    <div class="field"><label>职业 / 头衔</label><input id="pf-job" value="${attr(p.job||"")}" placeholder="例如：数据分析师"></div>
+    <div class="field"><label>个性签名</label><textarea id="pf-motto" rows="2" placeholder="写在主页上的一句话">${esc(p.motto||"")}</textarea></div>
+    <button id="pf-save" style="width:100%;padding:12px;background:var(--accent);color:var(--on-accent);border:none;border-radius:10px;font-size:14px;font-weight:800;cursor:pointer">保存资料</button>
+  </div>`;
+  const bdayBlock=hasBday?`<div class="rec" style="background:var(--surface-card);border:1px solid var(--border);margin-top:14px;display:flex;align-items:center;gap:10px">
+    <span style="font-size:18px">🎂</span>
+    <div style="flex:1;font-size:12px;color:var(--text-secondary)">检测到生日 <b style="color:var(--text)">${p.birthday}</b> 还未加入提醒</div>
+    <button id="pf-addBday" style="padding:7px 12px;font-size:11.5px;font-weight:700;border:1px solid var(--accent);color:var(--accent);border-radius:8px;background:var(--accent-muted);cursor:pointer">一键加入</button></div>`:"";
+  return {head,body:formBlock+bdayBlock};
+}
+function renderProfileM(){
+  const P=profileUI();
+  $("#screen").innerHTML=`<div class="greet reveal"><div><h1>${modOf("profile").name}</h1><p>${modOf("profile").desc}</p></div></div>
+    <div style="margin-top:16px">${P.head}${P.body}</div>`;
+  $("#pf-ava").onclick=()=>$("#pf-file").click();
+  $("#pf-file").onchange=e=>{
+    const f=e.target.files&&e.target.files[0]; if(!f) return;
+    const rd=new FileReader();
+    rd.onload=()=>{ data.__avatar=rd.result; store.save(); renderProfileM(); toast("头像已更新"); };
+    rd.readAsDataURL(f); e.target.value="";
+  };
+  $("#pf-save").onclick=()=>{
+    data.profile={nickname:$("#pf-nickname").value.trim(),gender:$("#pf-gender").value,birthday:$("#pf-birthday").value,
+      city:$("#pf-city").value.trim(),phone:$("#pf-phone").value.trim(),email:$("#pf-email").value.trim(),
+      wechat:$("#pf-wechat").value.trim(),job:$("#pf-job").value.trim(),motto:$("#pf-motto").value.trim()};
+    store.save(); toast("个人资料已保存");
+  };
+  const ab=$("#pf-addBday");
+  if(ab) ab.onclick=()=>{
+    data.remind=data.remind||[];
+    data.remind.unshift({id:Date.now(),type:"birthday",title:data.profile.nickname||"我的生日",date:data.profile.birthday,ahead:1,quick:0,enabled:true,note:"来自个人信息"});
+    store.save(); toast("已加入生日提醒（提前 1 天 + 当天）");
+  };
+}
+
 
 /* per-module hero header: compact strip — icon + big number + label + optional progress bar */
 function headHero(m, big, label, pct){
@@ -1683,6 +2296,10 @@ function wireModule(key){
 /* ---------- EDITOR MODAL (per type) ---------- */
 function openEditor(key, item){
   const m=modOf(key); const editing=!!item;
+  if(m && ["mood","focus","health","remind","profile"].includes(m.type)){
+    // 专属交互模块：不弹通用编辑器，仅确保视图已渲染并可交互
+    renderModule(key); return;
+  }
   const d = item || newItem(m);
   let fields="";
   if(m.type==="todo"){
@@ -1931,10 +2548,10 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
     function gSearch(q){
       q=q.trim().toLowerCase(); if(!q) return [];
       const out=[];
-      CONFIG.modules.forEach(m=>(data[m.key]||[]).forEach(x=>{
+      CONFIG.modules.forEach(m=>{ if(!Array.isArray(data[m.key])) return; data[m.key].forEach(x=>{
         const t=(x.title||'').toLowerCase(), c=(x.note||x.content||'').toLowerCase();
         if(t.includes(q)||c.includes(q)) out.push({mk:m.key,mn:m.name,id:x.id,t:x.title,m:(x.note||x.content||x.category||'').slice(0,40)});
-      }));
+      }); });
       return out.slice(0,30);
     }
     function gSearchHTML(r){
@@ -2282,7 +2899,7 @@ buildDrawer();
 render();
 sync.badge(sync.on ? "自动同步中" : "未启用同步");
 sync.startAuto(); if(sync.on) sync.pull(true).then(()=>{ if((sync.cfg().rev||0)===0 && data && Object.keys(data).length) sync.push(); });
-(function(){ try{ var _cut=(function(){var _d=new Date();_d.setDate(_d.getDate()-30);return fmtLocal(_d);})(); if((data.__trash||[]).length){ var _before=data.__trash.length; data.__trash=data.__trash.filter(function(t){ return !t.__deletedAt || t.__deletedAt>=_cut; }); if(data.__trash.length!==_before) store.saveLocal(); } var _has=CONFIG.modules.some(function(m){ return (data[m.key]||[]).length>0; }); var _last=data.__lastExport||""; if(_has && (!_last || _last<=daysAgo(7))){ setTimeout(function(){ toast("距上次导出备份已超过 7 天，建议导出以防数据丢失", { label:"立即导出", fn:function(){ exportData(); } }); }, 3000); } }catch(e){} })();
+(function(){ try{ var _cut=(function(){var _d=new Date();_d.setDate(_d.getDate()-30);return fmtLocal(_d);})(); if((data.__trash||[]).length){ var _before=data.__trash.length; data.__trash=data.__trash.filter(function(t){ return !t.__deletedAt || t.__deletedAt>=_cut; }); if(data.__trash.length!==_before) store.saveLocal(); } var _has=CONFIG.modules.some(function(m){ return Array.isArray(data[m.key]) && data[m.key].length>0; }); var _last=data.__lastExport||""; if(_has && (!_last || _last<=daysAgo(7))){ setTimeout(function(){ toast("距上次导出备份已超过 7 天，建议导出以防数据丢失", { label:"立即导出", fn:function(){ exportData(); } }); }, 3000); } }catch(e){} })();
 (function(){ try{ initRecurBills(); }catch(e){} })();
 
   /* ============================================================
