@@ -625,14 +625,18 @@ svg{display:block}
     if(mapped&&mapped!==saved)try{localStorage.setItem('workbench-entry',mapped)}catch(e){}
     saved=mapped||saved;
   }
-  // v1.9: 移动端自动进入手机版工作台；桌面停留落地页。手机想看落地页加 ?home
-  var q=location.search+location.hash;
-  if(/[?&#]home\b/.test(q))return;
-  var isMobile = window.matchMedia("(max-width: 760px)").matches
-    || /Android|iPhone|iPod|Mobile|HarmonyOS/i.test(navigator.userAgent)
-    || (/iPad|Macintosh/.test(navigator.userAgent) && "ontouchend" in document && window.matchMedia("(max-width: 1024px)").matches);
-  if(isMobile) location.replace(saved==='workbench.html' ? 'workbench.html' : 'workbench-m.html');
-})();
+   // v1.20: 单一入口·双端自动直达 —— 手机→workbench-m.html，电脑→workbench.html，零中间页；
+   //        落地页仅可通过 ?home 参数访问（手机/桌面均可强制停留）
+   var q=location.search+location.hash;
+   if(/[?&#]home\b/.test(q))return;
+   var isMobile = window.matchMedia("(max-width: 760px)").matches
+     || /Android|iPhone|iPod|Mobile|HarmonyOS/i.test(navigator.userAgent)
+     || (/iPad|Macintosh/.test(navigator.userAgent) && "ontouchend" in document && window.matchMedia("(max-width: 1024px)").matches);
+   var target = isMobile ? 'workbench-m.html' : 'workbench.html';
+   // 尊重用户此前手动选择：saved 是另一端（用户上次手动进过）则跟用户走
+   if(saved && saved!==target && (saved==='workbench.html'||saved==='workbench-m.html')){ location.replace(saved); return; }
+   location.replace(target);
+ })();
 // Service Worker
 if('serviceWorker' in navigator){addEventListener('load',function(){navigator.serviceWorker.register('sw.js').then(function(){return navigator.serviceWorker.ready}).then(function(reg){try{reg.active&&reg.active.postMessage({precache:location.pathname})}catch(e){}}).catch(function(){})})}
 </script>
