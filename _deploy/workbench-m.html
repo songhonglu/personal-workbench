@@ -1266,7 +1266,7 @@ window.addEventListener("storage", function(e){
 });
 
 const sync = {
-  cfg(){ const raw=storage.getItem(SYNC_KEY); const DEF={url:"https://workbench-sync-321.pages.dev",token:""}; if(raw==null) return DEF; try { const c=JSON.parse(raw)||{}; if(!c.url) return DEF; if(c.url.includes("workers.dev")){c.url=DEF.url;} return c; } catch(e){ return DEF; } },
+  cfg(){ const raw=storage.getItem(SYNC_KEY); const DEF={url:"https://workbench-sync-321.pages.dev",token:"wb-u-74112998d53b4135aa12506de2204bfc"}; if(raw==null) return DEF; try { const c=JSON.parse(raw)||{}; if(!c.url) return DEF; if(c.url.includes("workers.dev")){c.url=DEF.url;} return c; } catch(e){ return DEF; } },
   set(k,v){ const c=this.cfg(); if(v===undefined) delete c[k]; else c[k]=v; storage.setItem(SYNC_KEY, JSON.stringify(c)); },
   get on(){ const c=this.cfg(); return !!(c.url && c.token); },
   _busy:false, _t:null,
@@ -1563,76 +1563,6 @@ function ensureV2M(d){
 let data = store.load();
 ensureV2M(data);
 
-/* ============================================================
-   wbCrypto — AES-GCM 加密层（Web Crypto，零依赖）
-   密钥：token 经 PBKDF2(SHA-256, 4096 迭代, 固定盐) 派生 256-bit AES 密钥
-   密文格式：ENC:v1 + JSON { ct: base64, iv: base64, exp: 毫秒, rev: 数字 }
-   本地缓存与云上传输均使用同一格式，后端/KV 只存密文。
-   ============================================================ */
-const wbCrypto = {
-  _salt: "workbench-v1-static-salt",
-  _keyCache: new Map(),
-  _derive(keyMaterial){
-    if(this._keyCache.has(keyMaterial)) return this._keyCache.get(keyMaterial);
-    const p = crypto.subtle.importKey("raw", new TextEncoder().encode(keyMaterial), "PBKDF2", false, ["deriveKey"])
-      .then(bk => crypto.subtle.deriveKey(
-        { name:"PBKDF2", hash:"SHA-256", salt:new TextEncoder().encode(this._salt), iterations:4096 },
-        bk, { name:"AES-GCM", length:256 }, false, ["encrypt","decrypt"]
-      )).then(ak => { this._keyCache.set(keyMaterial, ak); return ak; });
-    this._keyCache.set(keyMaterial, p);
-    return p;
-  },
-  async encrypt(obj, token){
-    const key = await this._derive(token);
-    const iv = crypto.getRandomValues(new Uint8Array(12));
-    const exp = Date.now() + 2*3600*1000;
-    const ct = new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM", iv}, key, new TextEncoder().encode(JSON.stringify(obj))));
-    const b64 = u8 => btoa(String.fromCharCode(...u8));
-    return { ct:b64(ct), iv:b64(iv), exp, rev:(obj.__syncRev||0) };
-  },
-  async decrypt(payload, token){
-    const key = await this._derive(token);
-    const u8 = s => new Uint8Array([...atob(s)].map(c=>c.charCodeAt(0)));
-    return JSON.parse(await crypto.subtle.decrypt({name:"AES-GCM", iv:u8(payload.iv)}, key, u8(payload.ct)));
-  },
-  _tok(){ try{ const c=JSON.parse(storage.getItem(SYNC_KEY)||"{}"); return c.token||""; }catch(e){ return ""; } }
-};
-/* 扩展 store：同步 token 读取；load 时解密 ENC:v1 前缀的本地缓存 */
-store._tok = function(){ return wbCrypto._tok(); };
-const _origStoreLoad = store.load.bind(store);
-store.load = function(){
-  const raw = storage.getItem(CONFIG.storageKey);
-  if(raw){
-    if(raw.indexOf("ENC:v1")===0 && this._tok()){
-      const token=this._tok();
-      /* 同步解密不可行——microtask 兜底：先返回同步种子，解密完成后合并 */
-      const seed=_origStoreLoad.call(this);
-      Promise.resolve().then(async()=>{
-        try{
-          const p=JSON.parse(raw.slice(6));
-          if(p.exp && Date.now()>p.exp) throw new Error("expired");
-          const d=await wbCrypto.decrypt(p, token);
-          const cur=data;
-          const baseKeys=Object.keys(d).filter(k=>!k.startsWith("__")||k==="__syncRev");
-          baseKeys.forEach(k=>{ if(d[k]!==undefined) cur[k]=d[k]; });
-          ensureV2M(cur); autoTrend(); store.saveLocal(); render();
-        }catch(e){ /* 解密失败：保留种子，等云端 pull 兜底 */ }
-      });
-      return seed;
-    }
-    try{ return JSON.parse(raw); }catch(e){}
-  }
-  return _origStoreLoad.call(this);
-};
-            ensureV2M(data); autoTrend(); render();
-          }catch(_){}
-        });
-      }catch(_){}
-    } else {
-      try{ const d=JSON.parse(newVal||"null"); if(d){ Object.assign(data,d); ensureV2M(data); autoTrend(); render(); } }catch(_){}
-    }
-  }
-});
 
 if(autoTrend()) store.saveLocal();   // v1.3 趋势分每日自动记录
 let view = "home";            // home | insight | <moduleKey>

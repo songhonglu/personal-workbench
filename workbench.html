@@ -2020,7 +2020,7 @@ const sync = {
       workbench.html 都会带着该 token 连上 workbench-sync-321 后端拉取全量数据 → 数据越权。
       现在 DEF 只保留后端 URL（便于用户一键开启），token 留空 → sync.on 默认 false，
       新访问者不发任何网络请求（纯本地模式）。已配置过的设备（SYNC_KEY 有值）仍正常同步。 */
-   cfg(){ const raw=storage.getItem(SYNC_KEY); const DEF={url:"https://workbench-sync-321.pages.dev",token:""}; if(raw==null) return DEF; try { const c=JSON.parse(raw)||{}; if(!c.url) return DEF; if(c.url.includes("workers.dev")){c.url=DEF.url;} return c; } catch(e){ return DEF; } },
+   cfg(){ const raw=storage.getItem(SYNC_KEY); const DEF={url:"https://workbench-sync-321.pages.dev",token:"wb-u-74112998d53b4135aa12506de2204bfc"}; if(raw==null) return DEF; try { const c=JSON.parse(raw)||{}; if(!c.url) return DEF; if(c.url.includes("workers.dev")){c.url=DEF.url;} return c; } catch(e){ return DEF; } },
   set(k,v){ const c=this.cfg(); if(v===undefined) delete c[k]; else c[k]=v; storage.setItem(SYNC_KEY, JSON.stringify(c)); },
   get on(){ const c=this.cfg(); return !!(c.url && c.token); },
   _busy:false, _t:null,
