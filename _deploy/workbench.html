@@ -1979,6 +1979,41 @@ const store = {
    • 协议与自托管方法见 reference/sync.md。
    ============================================================ */
 const SYNC_KEY = CONFIG.storageKey + "::sync";   // 同步配置/缓存，独立于 data
+
+/* ============================================================
+   wbCrypto — AES-GCM 加密层（Web Crypto，零依赖）
+   密钥：同步 token 经 PBKDF2(SHA-256, 4096 迭代, 固定盐) 派生 256-bit AES 密钥
+   密文格式：ENC:v1 + JSON { ct, iv, exp, rev }
+   本地缓存与云端均使用同一加密态；后端/KV 只存密文，token 即密码。
+   ============================================================ */
+const wbCrypto = {
+  _salt: "workbench-v1-static-salt",
+  _keyCache: new Map(),
+  _derive(keyMaterial){
+    if(this._keyCache.has(keyMaterial)) return this._keyCache.get(keyMaterial);
+    const p = crypto.subtle.importKey("raw", new TextEncoder().encode(keyMaterial), "PBKDF2", false, ["deriveKey"])
+      .then(bk => crypto.subtle.deriveKey(
+        { name:"PBKDF2", hash:"SHA-256", salt:new TextEncoder().encode(this._salt), iterations:4096 },
+        bk, { name:"AES-GCM", length:256 }, false, ["encrypt","decrypt"]
+      )).then(ak => { this._keyCache.set(keyMaterial, ak); return ak; });
+    this._keyCache.set(keyMaterial, p);
+    return p;
+  },
+  async encrypt(obj, token){
+    const key = await this._derive(token);
+    const iv = crypto.getRandomValues(new Uint8Array(12));
+    const exp = Date.now() + 2*3600*1000;
+    const ct = new Uint8Array(await crypto.subtle.encrypt({name:"AES-GCM", iv}, key, new TextEncoder().encode(JSON.stringify(obj))));
+    const b64 = u8 => btoa(String.fromCharCode(...u8));
+    return { ct:b64(ct), iv:b64(iv), exp, rev:(obj.__syncRev||0) };
+  },
+  async decrypt(payload, token){
+    const key = await this._derive(token);
+    const u8 = s => new Uint8Array([...atob(s)].map(c=>c.charCodeAt(0)));
+    return JSON.parse(await crypto.subtle.decrypt({name:"AES-GCM", iv:u8(payload.iv)}, key, u8(payload.ct)));
+  },
+  _syncTok(){ try{ const c=JSON.parse(storage.getItem(SYNC_KEY)||"{}"); return c.token||""; }catch(e){ return ""; } }
+};
 const sync = {
    /* v1.20.0 安全修复：默认 token 清空。
       原实现硬编码了 Song.Han 的同步 token（wb-12140654...），导致任何人打开公开
@@ -1998,36 +2033,56 @@ const sync = {
      this._auto=setInterval(()=>{ if(!this.on||this._busy||document.hidden||document.querySelector(".overlay")) return; this.pull(true); }, 5000);
      document.addEventListener("visibilitychange",()=>{ if(!document.hidden && this.on && !document.querySelector(".overlay")) this.pull(true); });
    },
-  async push(){
-    if(!this.on || this._busy) return; this._busy=true; this.badge("同步中…");
-    try{ ensureV2(data); }catch(_e){}   // v1.9.5: push 前清理反复队列僵尸条目，保证上传数据干净
-    try {
-      const res = await fetch(this._url("/data"), { method:"PUT", headers:{"Content-Type":"application/json"}, body: JSON.stringify({ data }) });
-      if(!res.ok) throw new Error("HTTP "+res.status);
-      const r = await res.json().catch(()=>({}));
-      if(r.rev!=null) this.set("rev", r.rev);
-      if(r.updatedAt) this.set("updatedAt", r.updatedAt);
-      this.set("lastSync", Date.now()); this._saveBase(data); this.badge("已同步");
-    } catch(e){ this.badge("同步失败"); console.warn("[sync] push:", e); }
-    finally { this._busy=false; }
-  },
-  async pull(silent){
-    if(!this.on) return;
-    try {
-      const res = await fetch(this._url("/data"), { method:"GET" });
-      if(!res.ok) throw new Error("HTTP "+res.status);
-      const r = await res.json().catch(()=>({}));
-      const localRev = this.cfg().rev||0;
-      if(!this._base()) this._saveBase((this.cfg().rev||0) > 0 ? {} : data);   // v1.9.3: 曾同步过的设备(rev>0)首拉 base 置空→数组并集合并，保住故障期间的本地新增；从未同步的全新设备仍整替云端，避免种子数据入库
-      if(r && r.data!=null && (r.rev||0) > localRev){
-        const _remote=r.data; data = this.mergeData(_remote); autoTrend(); store.saveLocal();
-        this.set("rev", r.rev); if(r.updatedAt) this.set("updatedAt", r.updatedAt);
-        this.set("lastSync", Date.now()); this._saveBase(data); render();
-        if(JSON.stringify(data)!==JSON.stringify(_remote)){ this.schedulePush(); if(!silent) toast("已合并本地与云端数据"); this.badge("已同步"); }
-        else { if(!silent) toast("已从云端拉取最新数据"); this.badge("已同步"); }
-      } else if(!silent){ toast("本地已是最新"); }
-    } catch(e){ if(!silent) toast("拉取失败："+e.message); this.badge("同步失败"); console.warn("[sync] pull:", e); }
-  },
+   async push(){
+     if(!this.on || this._busy) return; this._busy=true; this.badge("同步中…");
+     try{ ensureV2(data); }catch(_e){}
+     try {
+       const token=this.cfg().token;
+       let body;
+       if(token && crypto && crypto.subtle){
+         const enc = await wbCrypto.encrypt(data, token);
+         body = JSON.stringify({ data: enc, enc:"v1" });
+       } else {
+         body = JSON.stringify({ data });
+       }
+       const res = await fetch(this._url("/data"), { method:"PUT", headers:{"Content-Type":"application/json"}, body });
+       if(!res.ok) throw new Error("HTTP "+res.status);
+       const r = await res.json().catch(()=>({}));
+       if(r.rev!=null) this.set("rev", r.rev);
+       if(r.updatedAt) this.set("updatedAt", r.updatedAt);
+       this.set("lastSync", Date.now()); this._saveBase(data); this.badge("已同步");
+     } catch(e){ this.badge("同步失败"); console.warn("[sync] push:", e); }
+     finally { this._busy=false; }
+   },
+   async pull(silent){
+     if(!this.on) return;
+     try {
+       const res = await fetch(this._url("/data"), { method:"GET" });
+       if(!res.ok) throw new Error("HTTP "+res.status);
+       const r = await res.json().catch(()=>({}));
+       const localRev = this.cfg().rev||0;
+       if(!this._base()) this._saveBase((this.cfg().rev||0) > 0 ? {} : data);
+       if(r && r.data!=null && (r.rev||0) > localRev){
+         let _remote=r.data;
+         if(_remote && typeof _remote==="object" && _remote.ct && _remote.iv){
+           const token=this.cfg().token;
+           _remote=await wbCrypto.decrypt(_remote, token);
+         }
+         data = this.mergeData(_remote); autoTrend(); store.saveLocal();
+         this.set("rev", r.rev); if(r.updatedAt) this.set("updatedAt", r.updatedAt);
+         this.set("lastSync", Date.now()); this._saveBase(data); render();
+         if(JSON.stringify(data)!==JSON.stringify(_remote)){ this.schedulePush(); if(!silent) toast("已合并本地与云端数据"); this.badge("已同步"); }
+         else { if(!silent) toast("已从云端拉取最新数据"); this.badge("已同步"); }
+       } else if(!silent){ toast("本地已是最新"); }
+     } catch(e){
+       if(e && e.message && e.message.indexOf("Operation error")>=0){
+         if(!silent) toast("密码（token）不正确，无法解密云端数据"); this.badge("解密失败");
+       } else {
+         if(!silent) toast("拉取失败："+e.message); this.badge("同步失败");
+       }
+       console.warn("[sync] pull:", e);
+     }
+   },
   _baseKey(){ return SYNC_KEY+"::base"; },
   _saveBase(d){ try{ storage.setItem(this._baseKey(), JSON.stringify(d)); }catch(e){} },
   _base(){ try{ const s=storage.getItem(this._baseKey()); return s?JSON.parse(s):null; }catch(e){ return null; } },
@@ -2398,6 +2453,64 @@ function openSyncPanel(){
   overlay.querySelector("#sy-fpull").onclick = ()=>{ if(!confirm("确定用云端数据覆盖本机？本机现有数据将被整体替换（覆盖前会自动快照，可从备份恢复）。")) return; close(); sync.forcePull(); };
 }
 
+/* ---- store.load 包装：ENC:v1 加密态本地缓存 → 同步种子 + 微任务解密合并 ---- */
+const _origStoreLoadD = store.load.bind(store);
+store.load = function(){
+  const SLOT_KEY = wbUserSlot.active();
+  const raw = storage.getItem(SLOT_KEY);
+  if(raw && raw.indexOf("ENC:v1")===0 && wbCrypto._syncTok()){
+    const token=wbCrypto._syncTok();
+    const seed=_origStoreLoadD.call(this);
+    Promise.resolve().then(async()=>{
+      try{
+        const p=JSON.parse(raw.slice(6));
+        if(p.exp && Date.now()>p.exp) throw new Error("expired");
+        const d=await wbCrypto.decrypt(p, token);
+        const cur=data;
+        Object.keys(d).forEach(k=>{ if(d[k]!==undefined) cur[k]=d[k]; });
+        ensureV2(cur); autoTrend(); store.saveLocal(); render();
+      }catch(e){ /* 解密失败：保留种子，等云端 pull 兜底 */ }
+    });
+    return seed;
+  }
+  return _origStoreLoadD.call(this);
+};
+/* ---- store.saveLocal 增强：同步 token 存在时本地缓存写加密态 ---- */
+const _origSaveLocalD = store.saveLocal.bind(store);
+store.saveLocal = function(){
+  const token=wbCrypto._syncTok();
+  if(token && typeof crypto!=="undefined" && crypto.subtle){
+    _origSaveLocalD.call(this);   // 先按原有逻辑写（多空间/账号槽/XOR 全保留）
+    Promise.resolve().then(async()=>{
+      try{
+        const ct=await wbCrypto.encrypt(data, token);
+        storage.setItem(wbUserSlot.active(), "ENC:v1"+JSON.stringify(ct));
+      }catch(e){ /* 加密失败则保留明文态，不影响功能 */ }
+    });
+  } else {
+    _origSaveLocalD.call(this);
+  }
+};
+/* ---- storage 事件：同浏览器多 tab 实时互知 ---- */
+window.addEventListener("storage", function(e){
+  if(!e.key) return;
+  if(e.key!==wbUserSlot.active() && e.key!==SYNC_KEY && e.key!==CONFIG.storageKey) return;
+  const newVal=e.newValue||"";
+  if(newVal.indexOf("ENC:v1")===0 && wbCrypto._syncTok()){
+    try{
+      const p=JSON.parse(newVal.slice(6));
+      const token=wbCrypto._syncTok();
+      Promise.resolve().then(async()=>{
+        try{ if(p.exp&&Date.now()>p.exp) throw 0; const d=await wbCrypto.decrypt(p,token);
+          Object.keys(d).forEach(k=>{ if(d[k]!==undefined) data[k]=d[k]; });
+          ensureV2(data); autoTrend(); store.saveLocal(); render();
+        }catch(_){}
+      });
+    }catch(_){}
+  } else if(newVal){
+    try{ const d=JSON.parse(newVal); if(d&&typeof d==="object"){ Object.keys(d).forEach(k=>{ data[k]=d[k]; }); ensureV2(data); autoTrend(); store.saveLocal(); render(); } }catch(_){}
+  }
+});
 let data = store.load();
 ensureV2(data);                      // v2.0 补齐提醒/番茄/个人信息默认键，老数据平滑升级
 if(autoTrend()) store.saveLocal();   // v1.3 趋势分每日自动记录
