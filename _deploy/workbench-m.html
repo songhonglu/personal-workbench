@@ -995,6 +995,16 @@ const CONFIG = {
              {id:62,title:"《纳瓦尔宝典》摘录",content:"「把自己产品化」：找到别人做不了、你自己却像玩耍一样就能做的事，然后放大它。",mood:"摘录",date:daysAgo(1)},
              {id:63,title:"九月第三周复盘",content:"跑量达标，但熬夜次数偏多；下周把冥想固定到睡前，少刷短视频。",mood:"复盘",date:isoToday()},
              {id:64,title:"周末西山徒步",content:"秋天的山里空气很好，全程 8 公里，下次带相机去拍日出。",mood:"生活",date:daysAgo(5)} ] },
+    { key:"remind", name:"提醒中心", icon:"bell", tint:"#f2eef0", color:"var(--module-3)", type:"remind", desc:"闹铃·纪念日·生日·节假日 · 快捷反复提醒",
+      seed:[] },
+    { key:"focus", name:"番茄专注", icon:"timer", tint:"#eff0f4", color:"var(--module-2)", type:"focus", desc:"25 分钟专注 · 连续作战 · 今日战绩",
+      seed:[] },
+    { key:"profile", name:"个人信息", icon:"user", tint:"#f1eef4", color:"var(--module-5)", type:"profile", desc:"维护你的个性化资料",
+      seed:[] },
+    { key:"mood", name:"心情追踪", icon:"smile", tint:"#fdf3e8", color:"#e0954f", type:"mood", desc:"每日 1-5 分自评 · 情绪标签 · 周趋势",
+      seed:[] },
+    { key:"health", name:"健康追踪", icon:"heart", tint:"#e8f5f0", color:"#3a9d8f", type:"health", desc:"饮水 · 步数 · 睡眠 · 每日目标",
+      seed:[] },
   ],
 };
 
@@ -1026,8 +1036,12 @@ const ICONS = {
   trash:'<path d="M4 7h16"/><path d="M9 7V4.5h6V7"/><path d="M6 7l1 13h10l1-13"/><path d="M10 11v6M14 11v6"/>',
   close:'<path d="M6 6l12 12M18 6 6 18"/>',
   sun:'<circle cx="12" cy="12" r="4"/><path d="M12 3v2M12 19v2M4.2 4.2l1.4 1.4M18.4 18.4l1.4 1.4M3 12h2M19 12h2M4.2 19.8l1.4-1.4M18.4 5.6l1.4-1.4"/>',
-  moon:'<path d="M20 14.5A8 8 0 1 1 9.5 4 6.5 6.5 0 0 0 20 14.5z"/>',
-};
+   moon:'<path d="M20 14.5A8 8 0 1 1 9.5 4 6.5 6.5 0 0 0 20 14.5z"/>',
+   bell:'<path d="M6 9a6 6 0 0 1 12 0c0 5 2 6.5 2 6.5H4S6 14 6 9z"/><path d="M10 19a2.2 2.2 0 0 0 4 0"/>',
+   timer:'<circle cx="12" cy="13.5" r="7.5"/><path d="M12 10v4l2.5 1.5"/><path d="M9.5 2.5h5"/><path d="M12 2.5V6"/>',
+   smile:'<circle cx="12" cy="12" r="9"/><path d="M8 14.5c1 1.2 2.3 1.8 4 1.8s3-.6 4-1.8"/><circle cx="8.5" cy="10" r=".6" fill="currentColor" stroke="none"/><circle cx="15.5" cy="10" r=".6" fill="currentColor" stroke="none"/>',
+   heart:'<path d="M12 20.5C7 16.5 3.5 13.2 3.5 9.7 3.5 7 5.6 5 8.1 5c1.6 0 3 .8 3.9 2.1C12.9 5.8 14.3 5 15.9 5c2.5 0 4.6 2 4.6 4.7 0 3.5-3.5 6.8-8.5 10.8z"/>',
+ };
 function icon(name, size=22, sw=1.7){
   const path = ICONS[name] || ICONS.grid;
   return `<svg viewBox="0 0 24 24" width="${size}" height="${size}" fill="none" stroke="currentColor" stroke-width="${sw}" stroke-linecap="round" stroke-linejoin="round">${path}</svg>`;
@@ -1271,7 +1285,7 @@ function openSyncPanel(){
 let data = store.load();
 if(autoTrend()) store.saveLocal();   // v1.3 趋势分每日自动记录
 let view = "home";            // home | insight | <moduleKey>
-const EMPTY_HINTS={todo:"先把今天要做的 2-3 件事写下来，完成一条勾一条",checkin:"创建一个想坚持的小习惯，每天来打一次卡",read:"选一本书或一门课，从第一页开始推进",money:"记下第一笔收支，坚持一周就能看到趋势",note:"随手写下第一条想法、灵感或摘录"};
+const EMPTY_HINTS={todo:"先把今天要做的 2-3 件事写下来，完成一条勾一条",checkin:"创建一个想坚持的小习惯，每天来打一次卡",read:"选一本书或一门课，从第一页开始推进",money:"记下第一笔收支，坚持一周就能看到趋势",note:"随手写下第一条想法、灵感或摘录",remind:"设置一条生日 / 纪念日 / 节假日提醒，重要日子不遗漏",focus:"开启一个 25 分钟专注，看今天能攒下几颗番茄",profile:"完善昵称与个性签名，让工作台更有你的味道",mood:"给今天的心情打个 1-5 分，记录此刻状态",health:"记录今天的饮水 / 步数 / 睡眠，养成小习惯"};
 function persist(){ store.save(); render(); }
 
 /* ---------- chrome icons ---------- */
