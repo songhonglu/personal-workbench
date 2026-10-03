@@ -2033,7 +2033,7 @@ const sync = {
   _busy:false, _t:null,
   _apiBase(){ return (this.cfg().url||"").replace(/\/+$/,""); },   // v1.9.2: 原 _base 被下方快照版重名覆盖，致 _url 拼出非法地址
   _url(p){ return this._apiBase() + p + "?token=" + encodeURIComponent(this.cfg().token||""); },
-  schedulePush(){ if(!this.on) return; clearTimeout(this._t); this._t=setTimeout(()=>this.push(), 1000); },
+  schedulePush(){ if(!this.on) return; clearTimeout(this._t); this._t=setTimeout(()=>this.push(), 300); },
    // 全自动同步：每 5 秒静默拉取；后台标签页与编辑弹窗打开时暂停；切回页面立即拉取
    startAuto(){
      if(this._auto) return;
