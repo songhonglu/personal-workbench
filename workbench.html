@@ -2012,8 +2012,15 @@ const wbCrypto = {
     const u8 = s => new Uint8Array([...atob(s)].map(c=>c.charCodeAt(0)));
     return JSON.parse(await crypto.subtle.decrypt({name:"AES-GCM", iv:u8(payload.iv)}, key, u8(payload.ct)));
   },
-  _syncTok(){ try{ const c=JSON.parse(storage.getItem(SYNC_KEY)||"{}"); return c.token||""; }catch(e){ return ""; } }
+  _syncTok(){ try{ const c=JSON.parse(storage.getItem(SYNC_KEY)||"{}"); const userTok=c.token||""; if(userTok) return userTok; const defTok=(sync && sync.cfg && sync.cfg().token) || ""; return defTok; }catch(e){ return ""; } }
 };
+
+/* ============================================================
+   wbCrypto — AES-GCM 加密层（Web Crypto，零依赖）
+   密钥：同步 token 经 PBKDF2(SHA-256, 4096 迭代, 固定盐) 派生 256-bit AES 密钥
+   密文格式：ENC:v1 + JSON { ct, iv, exp, rev }
+   本地缓存与云端均使用同一加密态；后端/KV 只存密文，token 即密码。
+   ============================================================ */
 const sync = {
    /* v1.20.0 安全修复：默认 token 清空。
       原实现硬编码了 Song.Han 的同步 token（wb-12140654...），导致任何人打开公开

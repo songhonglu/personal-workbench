@@ -1213,7 +1213,7 @@ const wbCrypto = {
     const u8 = s => new Uint8Array([...atob(s)].map(c=>c.charCodeAt(0)));
     return JSON.parse(await crypto.subtle.decrypt({name:"AES-GCM", iv:u8(payload.iv)}, key, u8(payload.ct)));
   },
-  _tok(){ try{ const c=JSON.parse(storage.getItem(SYNC_KEY)||"{}"); return c.token||""; }catch(e){ return ""; } }
+  _tok(){ try{ const c=JSON.parse(storage.getItem(SYNC_KEY)||"{}"); const userTok=c.token||""; if(userTok) return userTok; const defTok=(sync && sync.cfg && sync.cfg().token) || ""; return defTok; }catch(e){ return ""; } }
 };
 /* 扩展 store：同步 token 读取；load 时解密 ENC:v1 前缀的本地缓存 */
 store._tok = function(){ return wbCrypto._tok(); };
