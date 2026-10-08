@@ -1308,6 +1308,7 @@ const sync = {
       const r = await res.json().catch(()=>({}));
       const localRev = this.cfg().rev||0;
       if(!this._base()) this._saveBase(data);
+      if(r && r.data==null) this._emptyCloud=true;   // v3.2: 仅当云端确实无数据时才允许初始 push，防止新设备 pull 失败后把种子数据覆盖云端
       if(r && r.data!=null && (r.rev||0) > localRev){
         /* 处理加密态：{ ct, iv, exp, rev, enc } → 解密后取 data */
         let _remote=r.data;
@@ -3019,7 +3020,7 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
 buildDrawer();
 render();
 sync.badge(sync.on ? "自动同步中" : "未启用同步");
-sync.startAuto(); if(sync.on) sync.pull(true).then(()=>{ if((sync.cfg().rev||0)===0 && data && Object.keys(data).length) sync.push(); });
+sync.startAuto(); if(sync.on) sync.pull(true).then(()=>{ if((sync.cfg().rev||0)===0 && sync._emptyCloud && data && Object.keys(data).length) sync.push(); });
 (function(){ try{ var _cut=(function(){var _d=new Date();_d.setDate(_d.getDate()-30);return fmtLocal(_d);})(); if((data.__trash||[]).length){ var _before=data.__trash.length; data.__trash=data.__trash.filter(function(t){ return !t.__deletedAt || t.__deletedAt>=_cut; }); if(data.__trash.length!==_before) store.saveLocal(); } var _has=CONFIG.modules.some(function(m){ return Array.isArray(data[m.key]) && data[m.key].length>0; }); var _last=data.__lastExport||""; if(_has && (!_last || _last<=daysAgo(7))){ setTimeout(function(){ toast("距上次导出备份已超过 7 天，建议导出以防数据丢失", { label:"立即导出", fn:function(){ exportData(); } }); }, 3000); } }catch(e){} })();
 (function(){ try{ initRecurBills(); }catch(e){} })();
 

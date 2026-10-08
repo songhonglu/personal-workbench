@@ -2070,6 +2070,7 @@ const sync = {
        const r = await res.json().catch(()=>({}));
        const localRev = this.cfg().rev||0;
        if(!this._base()) this._saveBase((this.cfg().rev||0) > 0 ? {} : data);
+       if(r && r.data==null) this._emptyCloud=true;   // v3.2: 仅当云端确实无数据时才允许初始 push，防止新设备 pull 失败后把种子数据覆盖云端
        if(r && r.data!=null && (r.rev||0) > localRev){
          let _remote=r.data;
          if(_remote && typeof _remote==="object" && _remote.ct && _remote.iv){
@@ -6221,7 +6222,7 @@ window.addEventListener("error",function(ev){
   console.error("[workbench] 未捕获异常：", ev.error||ev.message);
 });
 sync.badge(sync.on ? "自动同步中" : "未启用同步");
-sync.startAuto(); if(sync.on) sync.pull(true).then(function(){ if((sync.cfg().rev||0)===0 && data && Object.keys(data).length) sync.push(); }).catch(function(_e){ console.warn("[sync] 启动拉取失败：", _e); });
+sync.startAuto(); if(sync.on) sync.pull(true).then(function(){ if((sync.cfg().rev||0)===0 && sync._emptyCloud && data && Object.keys(data).length) sync.push(); }).catch(function(_e){ console.warn("[sync] 启动拉取失败：", _e); });
 (function(){ try{ var _cut=(function(){var _d=new Date();_d.setDate(_d.getDate()-30);return fmtLocal(_d);})(); if((data.__trash||[]).length){ var _before=data.__trash.length; data.__trash=data.__trash.filter(function(t){ return !t.__deletedAt || t.__deletedAt>=_cut; }); if(data.__trash.length!==_before) store.saveLocal(); } bak.save(JSON.stringify(data)); /* v1.9.4: 移除"距上次备份超过 x 天"打扰式提醒，改为每日自动快照 */ }catch(e){} })();
 (function(){ try{ initRecurBills(); }catch(e){} })();
 
