@@ -1211,7 +1211,8 @@ const wbCrypto = {
   async decrypt(payload, token){
     const key = await this._derive(token);
     const u8 = s => new Uint8Array([...atob(s)].map(c=>c.charCodeAt(0)));
-    return JSON.parse(await crypto.subtle.decrypt({name:"AES-GCM", iv:u8(payload.iv)}, key, u8(payload.ct)));
+    const pt = await crypto.subtle.decrypt({name:"AES-GCM", iv:u8(payload.iv)}, key, u8(payload.ct));
+    return JSON.parse(new TextDecoder().decode(pt));   // v3.2: ArrayBuffer 必须先解码为字符串，原写法 JSON.parse(ArrayBuffer) 恒抛异常致解密恢复/云端拉取全部静默失败
   },
   _tok(){ try{ const c=JSON.parse(storage.getItem(SYNC_KEY)||"{}"); const userTok=c.token||""; if(userTok) return userTok; const defTok=(sync && sync.cfg && sync.cfg().token) || ""; return defTok; }catch(e){ return ""; } }
 };
