@@ -1593,6 +1593,8 @@ function icon(name, size=22, sw=1.7){
 function fmtLocal(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }   // v1.3.1 本地日期，替代 toISOString(UTC)
 function isoToday(){ return fmtLocal(new Date()); }
 function today(){ return isoToday(); }
+/* v1.21.0 计划管理：本地时间戳 yyyy-MM-dd HH:mm，供 created_at / expected_finish_time / 调度日志使用 */
+function isoNowLocal(){ const d=new Date(); return fmtLocal(d)+" "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }
 function daysAgo(n){ const d=new Date(); d.setDate(d.getDate()-n); return fmtLocal(d); }
 
 /* ---- v1.3 趋势自动化：每日状态分（0-10）= 待办完成度 4 分 + 打卡完成度 4 分 + 当日有笔记 2 分 ---- */
@@ -2034,34 +2036,42 @@ const sync = {
   _busy:false, _t:null,
   _apiBase(){ return (this.cfg().url||"").replace(/\/+$/,""); },   // v1.9.2: 原 _base 被下方快照版重名覆盖，致 _url 拼出非法地址
   _url(p){ return this._apiBase() + p + "?token=" + encodeURIComponent(this.cfg().token||""); },
-  schedulePush(){ if(!this.on) return; clearTimeout(this._t); this._t=setTimeout(()=>this.push(), 300); },
-   // 全自动同步：每 5 秒静默拉取；后台标签页与编辑弹窗打开时暂停；切回页面立即拉取
-   startAuto(){
-     if(this._auto) return;
-     this._auto=setInterval(()=>{ if(!this.on||this._busy||document.hidden||document.querySelector(".overlay")) return; this.pull(true); }, 5000);
-     document.addEventListener("visibilitychange",()=>{ if(!document.hidden && this.on && !document.querySelector(".overlay")) this.pull(true); });
-   },
-   async push(){
-     if(!this.on || this._busy) return; this._busy=true; this.badge("同步中…");
-     try{ ensureV2(data); }catch(_e){}
-     try {
-       const token=this.cfg().token;
-       let body;
-       if(token && crypto && crypto.subtle){
-         const enc = await wbCrypto.encrypt(data, token);
-         body = JSON.stringify({ data: enc, enc:"v1" });
-       } else {
-         body = JSON.stringify({ data });
-       }
-       const res = await fetch(this._url("/data"), { method:"PUT", headers:{"Content-Type":"application/json"}, body });
-       if(!res.ok) throw new Error("HTTP "+res.status);
-       const r = await res.json().catch(()=>({}));
-       if(r.rev!=null) this.set("rev", r.rev);
-       if(r.updatedAt) this.set("updatedAt", r.updatedAt);
-       this.set("lastSync", Date.now()); this._saveBase(data); this.badge("已同步");
-     } catch(e){ this.badge("同步失败"); console.warn("[sync] push:", e); }
-     finally { this._busy=false; }
-   },
+   schedulePush(){ if(!this.on) return; clearTimeout(this._t); this._t=setTimeout(()=>this.push(), 300); },
+   // v3.3 修复①：pending push 队列——任何一次 push 失败（网络断/超时/DNS 污染等）都标记待补发，
+   // 由网络恢复、页面回前台、自动轮询三路触发补发，保证"最后一次成功 push 之后的本地改动"必然上云，
+   // 彻底消除"改动后该 push 永远丢失、对端永远收不到"的单向同步故障。
+   _pendingPush:false,
+   markPending(){ this._pendingPush=true; },
+   clearPending(){ this._pendingPush=false; },
+   tryFlush(){ if(this._pendingPush && this.on && !this._busy) this.push(); },
+    // 全自动同步：每 5 秒静默拉取；后台标签页与编辑弹窗打开时暂停；切回页面立即拉取
+    startAuto(){
+      if(this._auto) return;
+      this._auto=setInterval(()=>{ if(!this.on||this._busy||document.hidden||document.querySelector(".overlay")) return; if(this._pendingPush) this.push(); else this.pull(true); }, 5000);
+      document.addEventListener("visibilitychange",()=>{ if(document.hidden) return; if(!this.on || document.querySelector(".overlay")) return; if(this._pendingPush) this.push(); else this.pull(true); });
+      window.addEventListener("online",()=>{ if(this.on) this.tryFlush(); });   // 网络恢复立即补发
+    },
+    async push(){
+      if(!this.on || this._busy) { if(!this.on && this._pendingPush) this.markPending(); return; } this._busy=true; this.badge("同步中…");
+      try{ ensureV2(data); }catch(_e){}
+      try {
+        const token=this.cfg().token;
+        let body;
+        if(token && crypto && crypto.subtle){
+          const enc = await wbCrypto.encrypt(data, token);
+          body = JSON.stringify({ data: enc, enc:"v1" });
+        } else {
+          body = JSON.stringify({ data });
+        }
+        const res = await fetch(this._url("/data"), { method:"PUT", headers:{"Content-Type":"application/json"}, body });
+        if(!res.ok) throw new Error("HTTP "+res.status);
+        const r = await res.json().catch(()=>({}));
+        if(r.rev!=null) this.set("rev", r.rev);
+        if(r.updatedAt) this.set("updatedAt", r.updatedAt);
+        this.set("lastSync", Date.now()); this._saveBase(data); this.clearPending(); this.badge("已同步");
+      } catch(e){ this.markPending(); this.badge("同步失败"); console.warn("[sync] push 失败，已标记待补发:", e); }
+      finally { this._busy=false; }
+    },
    async pull(silent){
      if(!this.on) return;
      try {
@@ -2070,8 +2080,8 @@ const sync = {
        const r = await res.json().catch(()=>({}));
        const localRev = this.cfg().rev||0;
        if(!this._base()) this._saveBase((this.cfg().rev||0) > 0 ? {} : data);
-       if(r && r.data==null) this._emptyCloud=true;   // v3.2: 仅当云端确实无数据时才允许初始 push，防止新设备 pull 失败后把种子数据覆盖云端
-       if(r && r.data!=null && (r.rev||0) > localRev){
+        if(r && r.data==null) this._emptyCloud=true;   // v3.2: 仅当云端确实无数据时才允许初始 push，防止新设备 pull 失败后把种子数据覆盖云端
+        if(r && r.data!=null && (r.rev||0) > localRev){
          let _remote=r.data;
          if(_remote && typeof _remote==="object" && _remote.ct && _remote.iv){
            const token=this.cfg().token;
@@ -2083,14 +2093,15 @@ const sync = {
          if(JSON.stringify(data)!==JSON.stringify(_remote)){ this.schedulePush(); if(!silent) toast("已合并本地与云端数据"); this.badge("已同步"); }
          else { if(!silent) toast("已从云端拉取最新数据"); this.badge("已同步"); }
        } else if(!silent){ toast("本地已是最新"); }
-     } catch(e){
-       if(e && e.message && e.message.indexOf("Operation error")>=0){
-         if(!silent) toast("密码（token）不正确，无法解密云端数据"); this.badge("解密失败");
-       } else {
-         if(!silent) toast("拉取失败："+e.message); this.badge("同步失败");
-       }
-       console.warn("[sync] pull:", e);
-     }
+      } catch(e){
+        if(e && e.message && e.message.indexOf("Operation error")>=0){
+          if(!silent) toast("密码（token）不正确，无法解密云端数据"); this.badge("解密失败");
+        } else {
+          this.markPending();   // v3.3 修复②：pull 网络失败 → 本地改动标记待补发（网络恢复后自动上云）
+          if(!silent) toast("拉取失败："+e.message); this.badge("同步失败");
+        }
+        console.warn("[sync] pull:", e);
+      }
    },
   _baseKey(){ return SYNC_KEY+"::base"; },
   _saveBase(d){ try{ storage.setItem(this._baseKey(), JSON.stringify(d)); }catch(e){} },
@@ -3463,10 +3474,15 @@ function recHTML(m,x){
   // default layout
   if(m.type==="todo"){ const p=(m.priorities||[]).find(p=>p.key===x.priority);
     const bchk=todoBatch?`<div class="batch-chk js-bsel ${todoSel.has(String(x.id))?'on':''}" data-id="${x.id}">${icon("check",13,2.6)}</div>`:'';
+    // v1.21.0 计划管理：待办条目状态徽章（延期/完成）+ 预计完成时间
+    const _tst=planStatusOf(x);
+    const _tstBadge=(_tst==="delayed"||_tst==="done")?`<span class="badge" style="background:${_tst==='done'?'var(--module-1)':'var(--surface-nested)'};color:${_tst==='done'?'#fff':'var(--danger,#b3403a)'}">${PLAN_STATUS[_tst].icon} ${PLAN_STATUS[_tst].label}</span>`:'';
+    const _texpBadge=x.expected_finish_time?`<span class="badge" style="background:var(--surface-nested);color:var(--text-secondary)">🎯 ${esc(x.expected_finish_time)}</span>`:'';
     return `<div class="rec ${layoutCls}">${acts}<div class="top" style="padding-right:60px">${bchk}<div class="chk js-chk ${x.done?'on':''}" data-id="${x.id}">${chkMark}</div>
       ${thumb}
       <div class="body" data-edit="${x.id}"><span class="rname ${x.done?'done':''}">${esc(x.title)}</span>
       ${p?`<span class="badge" style="background:${p.color};color:${p.text}"><span class="dot"></span>${p.label}</span>`:''}
+      ${_tstBadge||_texpBadge?`<div class="meta-line" style="margin-top:4px">${_tstBadge}${_texpBadge}</div>`:''}
       ${x.note?`<span class="rdate" style="margin-left:0;color:var(--text-tertiary)">${esc(x.note).slice(0,40)}</span>`:''}${customBlock}</div></div></div>`; }
   if(m.type==="checkin"){ const st=streak(x.log); const t=today();
     if(x.goal>0){
@@ -3494,6 +3510,13 @@ function recHTML(m,x){
      const _dlExpired=x.deadline&&new Date(x.deadline)<new Date(today());
      const dlBadge=x.deadline?`<span class="badge" style="background:${_dlExpired?'var(--danger)':'var(--accent-muted)'};color:${_dlExpired?'var(--on-accent)':'var(--accent)'}">${_dlExpired?'⚠️':'⏰'} ${esc(x.deadline)}</span>`:'';
      const hBadge=hl?`<span class="badge" style="background:var(--module-3);color:#fff">${icon("leaf",12)} ${esc(hl.title)}</span>`:'';
+     // v1.21.0 计划管理：状态图标+文字、预计完成时间、创建时间
+     const _pst=planStatusOf(x);
+     const _ps=PLAN_STATUS[_pst]||PLAN_STATUS.not_started;
+     const _stBadge=`<span class="badge" style="background:${_pst==='done'?'var(--module-1)':(_pst==='delayed'||_pst==='cancelled'||_pst==='terminated')?'var(--surface-nested)':'var(--surface-card)'};color:${_ps.color||'var(--text-secondary)'};font-weight:600">${_ps.icon} ${_ps.label}</span>`;
+     const _expInfo=x.expected_finish_time?`<span class="badge" style="background:var(--surface-nested);color:var(--text-secondary)">🎯 ${esc(x.expected_finish_time)}</span>`:'';
+     const _metaLine=[_stBadge,_expInfo,dlBadge,hBadge].filter(Boolean).join("");
+     const _createdNote=x.created_at?`<div style="margin-top:4px;font-size:10.5px;color:var(--text-tertiary)">创建于 ${esc(x.created_at)}${x.last_review_at?` · 最近核对 ${esc(x.last_review_at)}`:''}</div>`:'';
      // v1.13.0: 子任务进度条（目标拆解）
      const subs=x.subs||[]; const subDone=subs.filter(s=>s.done).length;
      const subsBlock=subs.length?`<div style="margin-top:7px"><div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--text-tertiary);margin-bottom:4px"><span>🧩 拆解 ${subDone}/${subs.length}</span></div>
@@ -3502,7 +3525,7 @@ function recHTML(m,x){
        <span class="rname">${esc(x.title)}</span>
        <div class="pbar"><i style="width:${pct}%;background:${m.color}"></i></div>
        <span class="rdate" style="margin-left:0;color:var(--text-secondary)">${x.current}/${x.target} ${x.unit||m.unit||''} · ${pct}%</span>
-       ${dlBadge||hBadge?`<div class="meta-line">${dlBadge}${hBadge}</div>`:''}${x.note?`<div class="rnote">${esc(x.note)}</div>`:''}${subsBlock}${customBlock}</div></div></div>`; }
+       ${_metaLine?`<div class="meta-line">${_metaLine}</div>`:''}${x.note?`<div class="rnote">${esc(x.note)}</div>`:''}${subsBlock}${_createdNote}${customBlock}</div></div></div>`; }
   if(m.type==="finance"){ const inc=x.type==="income"; const trf=x.type==="transfer";
     const fchk=finBatch?`<div class="batch-chk js-fsel ${finSel.has(String(x.id))?'on':''}" data-id="${x.id}">${icon("check",13,2.6)}</div>`:'';
     return `<div class="rec ${layoutCls}">${acts}<div class="top" style="padding-right:60px">${fchk}${thumb}<div class="body" data-edit="${x.id}">
@@ -3839,7 +3862,8 @@ function openEditor(key,item){
   if(m.type==="todo"){
     fields=`<div class="field"><label>任务</label><input id="f-title" value="${attr(d.title)}" placeholder="要做什么？"/></div>
       <div class="field"><label>优先级</label><div class="seg" id="f-prio">${(m.priorities||[]).map(p=>`<div class="opt ${p.key===d.priority?'on':''}" data-v="${p.key}">${p.label}</div>`).join("")}</div></div>
-      <div class="field"><label>备注</label><textarea id="f-note" placeholder="补充说明">${esc(d.note||'')}</textarea></div>`;
+      <div class="field"><label>备注</label><textarea id="f-note" placeholder="补充说明">${esc(d.note||'')}</textarea></div>
+      <div class="field"><label>预计完成时间（可选）</label><input id="f-texp" type="datetime-local" value="${d.expected_finish_time ? d.expected_finish_time.slice(0,10)+'T00:00' : ''}"/></div>`;
   } else if(m.type==="checkin"){
     fields=`<div class="field"><label>打卡项</label><input id="f-title" value="${attr(d.title)}" placeholder="例如：喝够 8 杯水"/></div>
       <div class="frow">
@@ -3852,6 +3876,8 @@ function openEditor(key,item){
       <div class="frow"><div class="field"><label>当前</label><input id="f-cur" type="number" value="${d.current??0}"/></div>
       <div class="field"><label>目标</label><input id="f-tgt" type="number" value="${d.target??1}"/></div>
       <div class="field"><label>单位</label><input id="f-unit" value="${attr(d.unit||m.unit||'')}"/></div></div>
+      <div class="field"><label>预计完成时间（可选）</label><input id="f-exp" type="datetime-local" value="${d.expected_finish_time ? d.expected_finish_time.slice(0,10)+'T00:00' : ''}" title="到期后 00:00 自动判定：完成→完成 / 未完成→延期"/></div>
+      <div class="field"><label>状态</label><div class="seg" id="f-planst">${Object.entries(PLAN_STATUS).filter(([k])=>k!=="delayed").map(([k,v])=>`<div class="opt ${planStatusOf(d)===k?'on':''}" data-v="${k}">${v.icon} ${v.label}</div>`).join("")}</div></div>
       ${data.checkin&&data.checkin.length?`<div class="field"><label>关联习惯（打卡自动推进）</label><div class="seg" id="f-habit">${data.checkin.map(h=>`<div class="opt ${d.habitId===h.id?'on':''}" data-v="${h.id}">${esc(h.title)}</div>`).join("")}</div><p class="sub" style="margin:4px 0 0;font-size:11.5px">选中习惯后，每次该习惯打卡自动 +1 进度</p></div>`:''}
        ${d.deadline?`<div class="field"><label>截止日期</label><input id="f-deadline" type="date" value="${d.deadline}"/></div>`:`<div class="field"><label>截止日期（可选）</label><input id="f-deadline" type="date" value="${d.deadline||''}" placeholder="yyyy-mm-dd"/></div>`}
        <div class="field"><label>目标拆解（可选）</label>
@@ -3945,10 +3971,24 @@ function openEditor(key,item){
     const seg=id=>{ const el=overlay.querySelector(id+" .on"); return el?el.dataset.v:undefined; };
     d.title=(val("#f-title")||"").trim()||"未命名";
     d.layout=seg("#f-layout")||'default';
-    if(m.type==="todo"){ d.priority=seg("#f-prio")||d.priority; d.note=(val("#f-note")||"").trim(); }
+    if(m.type==="todo"){ d.priority=seg("#f-prio")||d.priority; d.note=(val("#f-note")||"").trim();
+      // v1.21.0 计划管理：今日计划也支持 expected_finish_time
+      const tv=val("#f-texp"); if(tv) d.expected_finish_time=tv.replace("T"," "); else delete d.expected_finish_time; }
     else if(m.type==="progress"){ d.current=Math.max(0,+val("#f-cur")||0); d.target=Math.max(1,+val("#f-tgt")||1); d.unit=(val("#f-unit")||"").trim(); d.note=(val("#f-note")||"").trim();
       const hv=seg("#f-habit"); if(hv) d.habitId=hv; else delete d.habitId;
       const dl=val("#f-deadline"); if(dl) d.deadline=dl; else delete d.deadline;
+      // v1.21.0 计划管理：expected_finish_time（datetime-local "yyyy-mm-ddThh:mm" → 本地 "yyyy-mm-dd HH:mm"）
+      const ev=val("#f-exp"); if(ev) d.expected_finish_time = ev.replace("T"," "); else delete d.expected_finish_time;
+      const pv=seg("#f-planst");
+      if(pv){
+        const cur=planStatusOf(d);
+        if(pv!==cur){
+          // 用户手动改状态：允许直切任意合法枚举值（系统自动判定才受状态机约束）
+          d.status=pv;
+          if(pv==="done"){ d.done=true; d.current=Math.max(+d.current||0, +d.target||0); }
+          else if(pv==="cancelled"||pv==="terminated"){ d.done=false; }
+        }
+      }
       // v1.13.0: 保存子任务列表
       d.subs=d.subs||[]; const subEdit=val("#f-sub-t");
       if(subEdit && subEdit.trim() && subEdit!==d.subs.map(s=>s.title).join(" / ")){
@@ -3965,7 +4005,22 @@ function openEditor(key,item){
     else if(m.type==="note"){ d.mood=seg("#f-mood")||d.mood||""; d.content=(val("#f-content")||"").trim(); d.date=val("#f-date");
       const tg=val("#f-tags"); if(tg){ d.tags=tg.split(/\s+/).filter(Boolean); } else delete d.tags; }
     else if(m.type==="checkin"){ const gv=Math.max(0,+val("#f-goal")||0); if(gv>0){ d.goal=gv; d.unit=(val("#f-unit")||"").trim(); } else { delete d.goal; delete d.unit; } }
-    // save custom fields
+    // v1.21.0 计划管理：created_at 新建时间（系统写入，界面不展示，仅列表展示）
+    if(!editing && !d.created_at) d.created_at = isoNowLocal();
+    // v1.21.0 计划状态机：新建/编辑保存时补 status 与调度日志时间戳
+    if(m.type==="progress" || m.type==="todo"){
+      if(!d.status) d.status = "not_started";
+      if(d.status && d.status!=="done") d.last_review_at = isoNowLocal();
+    }
+  // v1.21.0 计划管理：created_at 新建时间（系统写入，界面不展示，仅列表展示）；
+  // expected_finish_time 预计完成时间（新建/编辑页时间控件可选，列表展示）
+  if(!editing) d.created_at = isoNowLocal();
+  if(!m.type==="profile") { /* 计划类模块补状态机字段 */ }
+  if(m.type==="progress" || m.type==="todo"){
+    if(!d.status) d.status = "not_started";
+    if(d.status!=="done") d.last_review_at = isoNowLocal();   // v1.21.0: 调度执行/补偿扫描的时间戳（执行日志）
+  }
+  // save custom fields
     (m.fields||[]).forEach(f=>{
       if(f.type==="select") d[f.key]=seg("#f-cf-"+f.key)||d[f.key]||"";
       else if(f.type==="number") d[f.key]=Math.max(0,+val("#f-cf-"+f.key)||0);
@@ -4052,6 +4107,7 @@ function ensureV2(d){
   if(!d.__remindState.fired) d.__remindState.fired={};
   if(!Array.isArray(d.__remindState.queue)) d.__remindState.queue=[];
   if(!Array.isArray(d.__tombstones)) d.__tombstones=[];   // v1.9.6: 持久墓碑——独立于回收站的删除记录，清空回收站不影响
+  if(!d.__planReview||typeof d.__planReview!=="object"||Array.isArray(d.__planReview)) d.__planReview={};   // v1.21.0: 计划调度日志（last_run_day 幂等键）
   if(Array.isArray(d.remind)&&d.remind.some(x=>x&&x.type==="quick"&&x.done===true)){ const dq=d.remind.filter(x=>x&&x.type==="quick"&&x.done===true); d.remind=d.remind.filter(x=>!(x&&x.type==="quick"&&x.done===true)); dq.forEach(x=>{ const tid="remind::"+String(x.id); if(!d.__tombstones.some(t=>t&&t.id===tid)) d.__tombstones.push({id:tid,at:isoToday()}); }); if(d.__tombstones.length>1000)d.__tombstones.splice(0,d.__tombstones.length-1000); }   // v1.9.7: 已触发的快捷提醒自动清理，带墓碑防跨端复活
   if(Array.isArray(d.checkin)) d.checkin.forEach(x=>{ if(x&&x.log){ const tk=isoToday(); Object.keys(x.log).forEach(k=>{ if(String(k)>tk) delete x.log[k]; }); } });   // v1.9.8: 清理未来日期的打卡记录（历史误勾）
   const __alive=new Map((d.remind||[]).map(x=>[x.id,x]));
@@ -4059,6 +4115,110 @@ function ensureV2(d){
   return d;
 }
 function pomoToday(){ const P=data.__pomo; if(!P.today||P.today.date!==isoToday()) P.today={date:isoToday(),count:0,min:0}; return P.today; }
+
+/* ============================================================
+   v1.21.0 计划管理：每日任务调度（状态自动判定）+ 状态机 + 补偿机制
+   ------------------------------------------------------------
+   设计说明：
+   - 本项目是纯前端（localStorage + 云端同步），没有常驻服务端进程，
+     因此"每天 00:00 定时任务"在浏览器中落地为"页面加载时 + 每 5 分钟轮询"的调度器：
+     * 主任务：00:00-08:00 窗口内，只要页面在后台（document.hidden）且"上一个 00:00 未执行过"（__planReview.last_run_day !== 今天），就执行一次
+     * 补偿任务：08:00 后若"今天 00:00 的主任务未成功执行"（last_run_day 仍是昨天），再补执行一次，确保状态不漏判
+   - 执行结果写入 __planReview = { last_run_day, last_result, last_log: [...] }，作为"当日是否已成功执行"的判定依据
+   - 幂等：同一天内无论页面开几次、主/补偿各跑几次，只认第一次成功结果（last_run_day 已置今天则跳过）
+   - 状态判定口径：
+     * "当日到期" = expected_finish_time 为空（不设期→不判）或 expected_finish_time <= 当天 00:00（即到期日在昨天或更早）
+     * "已完成"   = done===true 或 current>=target（进度型）或 status==="done"
+     * 未完成 → 自动 status="delayed"（延期）；已完成 → status="done"
+   ============================================================ */
+const PLAN_STATUS = {
+  not_started:{ label:"未开始", icon:"○", color:"var(--text-tertiary)" },
+  in_progress:  { label:"进行中", icon:"◔", color:"var(--accent)" },
+  delayed:      { label:"延期",   icon:"⏰", color:"var(--danger,#b3403a)" },
+  cancelled:    { label:"取消",   icon:"✕", color:"var(--text-tertiary)" },
+  terminated:   { label:"终止",   icon:"■", color:"var(--danger,#b3403a)" },
+  done:         { label:"完成",   icon:"✓", color:"var(--module-1,#2e9e5b)" },
+};
+/* 允许的转换（from → [to...]）：
+   not_started → in_progress / cancelled / done
+   in_progress → done / delayed / cancelled / terminated
+   delayed     → in_progress / cancelled / terminated
+   done        → (终态，不可再转；仅"恢复"可回到 in_progress)
+   cancelled / terminated → (终态，不可再转)
+   系统自动判定只允许：in_progress/delayed/not_started → delayed（未完成到期）或 → done（已完成）；
+   用户操作：标记完成 done、取消 cancelled、终止 terminated、继续 in_progress */
+const PLAN_TRANSITIONS = {
+  not_started:["in_progress","cancelled","terminated","done"],
+  in_progress:["done","delayed","cancelled","terminated"],
+  delayed:["in_progress","cancelled","terminated","done"],
+  done:[],   // 终态：系统自动判定后不可再转；如需恢复，须手动删除 status 字段或新建条目
+  cancelled:[],
+  terminated:[],
+};
+function planStatusOf(x){
+  if(!x) return "not_started";
+  if(x.status && PLAN_STATUS[x.status]) return x.status;
+  if(x.done===true || x.status==="done") return "done";
+  const cur=+x.current||0, tgt=+x.target||0;
+  if(tgt>0 && cur>=tgt) return "done";
+  const _due=x.expected_finish_time?new Date(x.expected_finish_time.replace(" ","T")):null; if(_due && _due < new Date(isoToday()+"T00:00:00")) return "delayed";
+  return cur>0 ? "in_progress" : "not_started";
+}
+function canPlanTransition(from,to){ return (PLAN_TRANSITIONS[from]||[]).includes(to); }
+function setPlanStatus(x,to,by){
+  const from=planStatusOf(x);
+  if(from===to) return false;
+  if(!canPlanTransition(from,to)) { console.warn("[plan] 禁止的状态转换:",from,"→",to); return false; }
+  x.status=to; if(to==="done") x.done=true; if(by) x.status_by=by;
+  return true;
+}
+/* 主/补偿共用的扫描逻辑：返回本次改动的条目数；幂等由调用方通过 __planReview.last_run_day 保证 */
+function planDailyScan(trigger){
+  const log=[];
+  const scopeKeys=["read","todo"];   // 计划类模块：长期目标(progress) + 今日计划(todo)
+  let changed=0;
+  scopeKeys.forEach(k=>{
+    const arr=data[k]; if(!Array.isArray(arr)) return;
+    arr.forEach(x=>{
+      if(!x||typeof x!=="object") return;
+      const st=planStatusOf(x);
+      const hasDue = !!(x.expected_finish_time || x.deadline);
+      if(!hasDue) { if(x.status && st!=="done" && x.status!==st) x.status=st; return; }
+      const due = x.expected_finish_time ? new Date(x.expected_finish_time.replace(" ","T")) : new Date(x.deadline+"T00:00:00");
+      const today0 = new Date(isoToday()+"T00:00:00");
+      const completed = x.done===true || st==="done" || ((+x.current||0)>=((+x.target)||0) && (+x.target||0)>0);
+      if(due < today0){
+        if(completed){
+          if(st!=="done"){ x.status="done"; x.done=true; log.push(k+"::"+x.id+" 到期且已完成 → 完成"); changed++; }
+        } else {
+          if(st!=="delayed"){ x.status="delayed"; log.push(k+"::"+x.id+" 到期未完成 → 延期"); changed++; }
+        }
+      } else {
+        // 未到期：若之前被误标延期，回正为进行中/未开始（幂等）
+        if(st==="delayed" && !completed){ x.status=( +x.current>0 ? "in_progress" : "not_started" ); log.push(k+"::"+x.id+" 未到期，延期状态回正"); changed++; }
+      }
+      x.last_review_at = isoNowLocal();
+    });
+  });
+  if(!data.__planReview || typeof data.__planReview!=="object") data.__planReview={};
+  data.__planReview.last_run_day = isoToday();
+  data.__planReview.last_result = trigger;
+  data.__planReview.last_log = log.slice(0,50);
+  data.__planReview.last_changed = changed;
+  return changed;
+}
+/* 调度器：页面加载 + 每 5 分钟轮询。主任务窗口 00:00-08:00；补偿窗口 08:00 起 */
+function planSchedulerTick(){
+  const now=new Date();
+  const hour=now.getHours();
+  const day=isoToday();
+  const rv=data.__planReview||{};
+  if(rv.last_run_day===day) return;   // 今天已成功执行过（主或补偿）→ 幂等跳过
+  if(hour>=0 && hour<8){ planDailyScan("main-00:00"); store.save(); return; }
+  if(hour>=8){ planDailyScan("comp-08:00"); store.save(); return; }
+}
+setInterval(planSchedulerTick, 5*60*1000);   // 每 5 分钟检查一次是否需要执行（页面在后台也跑）
+
 
 /* ---------- 响铃引擎（WebAudio 循环音 + 顶部横幅 + 标题闪烁） ---------- */
 const QUICK_OPTS=[{m:5,l:"5 分钟"},{m:10,l:"10 分钟"},{m:15,l:"15 分钟"},{m:30,l:"30 分钟"},{m:45,l:"45 分钟"},{m:60,l:"1 小时"},{m:120,l:"2 小时"}];
@@ -4178,8 +4338,9 @@ function remTick(){
 }
 
 /* ---------- 更新日志 ---------- */
-const APP_VERSION="1.18.0";
+const APP_VERSION="1.21.0";
 const CHANGELOG=[
+  {v:"1.21.0",date:"2026-10-08",title:"计划管理模块 · 每日自动状态判定 + 同步补发机制",fixes:["新增 created_at（系统自动写入，列表展示创建时间）","长期目标/今日计划 新增 expected_finish_time（时间控件，到期自动判定完成/延期）","状态机六态：未开始/进行中/延期/取消/终止/完成，列表展示图标+文字徽章","每日 00:00 主任务 + 08:00 补偿扫描调度器（幂等：__planReview.last_run_day 标记当日已执行）","同步链路修复：pull/push 网络失败时 markPending() 标记待补发，网络恢复/切前台自动补发上行","移动端 _mergeKey 墓碑参数对齐 PC 端，修复删除复活","清除双端 _emptyCloud 重复行","DNS 污染 + TCP 443 拦截故障排查文档（同步使用说明.md 第六节）"]},
   {v:"1.18.0",date:"2026-10-01",title:"好友系统增强 · 账号安全 · 统计面板",fixes:["好友关系治理：好友列表展示 @userId 与最近互动时间，未读 badge 挂「账号与好友」导航入口，移除好友入口接前端 + 跨设备 remove 端点","收件箱增强：全部已读（clearAllRead）+ 按好友 / 按类型过滤（todo/remind/money/note/habit/respond 六类）","账号安全：修改密码（校验旧密码 → 更新 FNV-1a 散列）+ 一键清除本机账号数据（数据槽/好友表/收件箱/注册项，不影响其他账号）","分享扩展：记账 / 笔记 / 习惯打卡 整条记录快照分享（type: money/note/habit，payload 带源记录 id 与快照字段）","提醒协同：接收方同意 / 拒绝 / 延期反向回传（respond type 回写原消息 responded 状态 + 新消息发给原发送方）","统计面板：好友活跃度排行（按消息数 Top10）+ 我的好友贡献占比（待办/提醒来自好友的比例条形图）","修复 renderSystemCfg 重复卡片（sys-enc / sys-space-list / sys-space-new 双份 DOM id）与 24 处乱码字符","质检门禁：node _test_smoke.js 全绿 + workbench.html 全部 script 块 new Function 编译通过 + 顶层重复声明扫描"]},
   {v:"1.17.1",date:"2026-10-01",title:"多用户体系修补版 · 好友消息通道健壮性",fixes:["wbFriends.send 清理：移除冗余 iMap 读取与未用变量，同浏览器/跨设备路径注释规范","wbFriends.removeFriend 补齐跨设备端点：启用同步后端时 POST /api/friends/{me}/remove 解除服务端好友关系（best-effort 不阻塞本地）","APP_VERSION 同步 1.17.0 → 1.17.1，CHANGELOG 与 v1.17.0 文档对齐（FNV-1a 本地哈希实现说明）"]},
   {v:"1.17.0",date:"2026-10-01",title:"多用户体系 · 好友系统 · 跨设备消息通道",fixes:["账号体系：注册/登录/登出，密码本地 SHA-256+盐哈希存储，数据按 userId 命名空间完全隔离（未登录行为与旧版完全一致）","好友系统：双向好友关系，好友间发送待办/提醒，同浏览器零依赖直接用，跨设备走 sync-server v2 端点","收件箱：「来自好友」未读横幅 + 一键转入我的待办/提醒，已读状态跨设备同步","sync-server v2：新增 /api/friends 好友图 + 收件箱端点（send/inbox/add/remove/markread），保留原 /data 多端同步协议","质检门禁强化：冒烟测试新增 27 条多用户全链路断言 + 顶层重复声明静态扫描，78 PASS / 0 FAIL","修复：wbUser.cur() 循环调用栈溢出、wbFriends.markRead 逻辑 bug、前后端消息协议对齐"]},
@@ -5109,6 +5270,30 @@ function renderSystemCfg(){
       <button class="btn ghost" id="sys-clearsw">清除旧 Service Worker 缓存</button>
     </div>
     <div class="side-card" style="margin:0">
+      <div class="sh">${icon("activity",15)} 计划调度日志</div>
+      <div class="sub" style="margin:6px 0 12px">每日 00:00 主任务 / 08:00 补偿任务自动扫描长期目标与今日计划的到期状态，结果记录在此。可手动立即执行一次。</div>
+      <div id="sys-planlog" style="font-size:12px;color:var(--text-secondary);line-height:1.7;max-height:160px;overflow:auto">${(()=>{
+        const rv=data.__planReview||{};
+        if(!rv.last_run_day) return '<span style="color:var(--text-tertiary)">尚未执行过</span>';
+        let h=`最近执行：<b>${esc(rv.last_run_day)}</b> · 触发：${esc(rv.last_result||'?')} · 改动 ${rv.last_changed??0} 条`;
+        if(rv.last_log&&rv.last_log.length){ h+=`<div style="margin-top:6px;padding:6px 8px;background:var(--surface-nested);border-radius:6px;font-size:11.5px">${rv.last_log.map(l=>esc(l)).join('<br>')}</div>`; }
+        return h;
+      })()}</div>
+      <button class="btn ghost" id="sys-planrun" style="margin-top:8px">立即扫描一次</button>
+    </div>
+    <div class="side-card" style="margin:0">
+      <div class="sh">${icon("activity",15)} 计划调度日志</div>
+      <div class="sub" style="margin:6px 0 12px">每日 00:00 主任务 / 08:00 补偿任务自动扫描长期目标与今日计划的到期状态，结果记录在此。可手动立即执行一次。</div>
+      <div id="sys-planlog" style="font-size:12px;color:var(--text-secondary);line-height:1.7;max-height:160px;overflow:auto">${(()=>{
+        const rv=data.__planReview||{};
+        if(!rv.last_run_day) return '<span style="color:var(--text-tertiary)">尚未执行过</span>';
+        let h=`最近执行：<b>${esc(rv.last_run_day)}</b> · 触发：${esc(rv.last_result||'?')} · 改动 ${rv.last_changed??0} 条`;
+        if(rv.last_log&&rv.last_log.length){ h+=`<div style="margin-top:6px;padding:6px 8px;background:var(--surface-nested);border-radius:6px;font-size:11.5px">${rv.last_log.map(l=>esc(l)).join('<br>')}</div>`; }
+        return h;
+      })()}</div>
+      <button class="btn ghost" id="sys-planrun" style="margin-top:8px">立即扫描一次</button>
+    </div>
+    <div class="side-card" style="margin:0">
       <div class="sh">${icon("shield",15)} 账号安全</div>
       <div class="sub" style="margin:6px 0 12px">修改当前账号密码，或一键清除本机该账号的全部数据（数据槽 / 好友表 / 收件箱 / 注册项）。</div>
       ${wbUser.cur()?`
@@ -5175,6 +5360,13 @@ function renderSystemCfg(){
   $("#sys-csv-file").onchange=e=>{ const f=e.target.files&&e.target.files[0]; if(f) csvImport(f); e.target.value=""; };
   $("#sys-bak").onclick=openBakPanel;
   $("#sys-sync").onclick=()=>sync.openPanel();
+  const _prEl=$("#sys-planrun");
+  if(_prEl) _prEl.onclick=function(){
+    const n=planDailyScan("manual");
+    store.save();
+    renderSystemCfg();
+    toast(n>0?`扫描完成，更新 ${n} 条状态`:"扫描完成，状态无变化");
+  };
   if($("#sys-clearsw")) $("#sys-clearsw").onclick=function(){
     var cleared=[];
     var done=function(){ toast("已清除旧缓存（"+cleared.length+" 项），正在重新加载…"); setTimeout(function(){ location.reload(); }, 400); };
@@ -6222,7 +6414,7 @@ window.addEventListener("error",function(ev){
   console.error("[workbench] 未捕获异常：", ev.error||ev.message);
 });
 sync.badge(sync.on ? "自动同步中" : "未启用同步");
-sync.startAuto(); if(sync.on) sync.pull(true).then(function(){ if((sync.cfg().rev||0)===0 && sync._emptyCloud && data && Object.keys(data).length) sync.push(); }).catch(function(_e){ console.warn("[sync] 启动拉取失败：", _e); });
+sync.startAuto(); if(sync.on) sync.pull(true).then(function(){ if((sync.cfg().rev||0)===0 && sync._emptyCloud && data && Object.keys(data).length) sync.push(); }).catch(function(_e){ console.warn("[sync] 启动拉取失败：", _e); sync.markPending(); });
 (function(){ try{ var _cut=(function(){var _d=new Date();_d.setDate(_d.getDate()-30);return fmtLocal(_d);})(); if((data.__trash||[]).length){ var _before=data.__trash.length; data.__trash=data.__trash.filter(function(t){ return !t.__deletedAt || t.__deletedAt>=_cut; }); if(data.__trash.length!==_before) store.saveLocal(); } bak.save(JSON.stringify(data)); /* v1.9.4: 移除"距上次备份超过 x 天"打扰式提醒，改为每日自动快照 */ }catch(e){} })();
 (function(){ try{ initRecurBills(); }catch(e){} })();
 

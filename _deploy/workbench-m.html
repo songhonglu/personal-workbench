@@ -1053,6 +1053,8 @@ function icon(name, size=22, sw=1.7){
 function fmtLocal(d){ return d.getFullYear()+"-"+String(d.getMonth()+1).padStart(2,"0")+"-"+String(d.getDate()).padStart(2,"0"); }   // v1.3.1 本地日期，替代 toISOString(UTC)
 function isoToday(){ return fmtLocal(new Date()); }
 function today(){ return isoToday(); }
+/* v1.21.0 计划管理：本地时间戳 yyyy-MM-dd HH:mm */
+function isoNowLocal(){ const d=new Date(); return fmtLocal(d)+" "+String(d.getHours()).padStart(2,"0")+":"+String(d.getMinutes()).padStart(2,"0"); }
 function daysAgo(n){ const d=new Date(); d.setDate(d.getDate()-n); return fmtLocal(d); }
 
 /* ---- v1.3 趋势自动化：每日状态分（0-10）= 待办完成度 4 分 + 打卡完成度 4 分 + 当日有笔记 2 分 ---- */
@@ -1273,33 +1275,41 @@ const sync = {
   _busy:false, _t:null,
   _apiBase(){ return (this.cfg().url||"").replace(/\/+$/,""); },
   _url(p){ return this._apiBase() + p + "?token=" + encodeURIComponent(this.cfg().token||""); },
-  schedulePush(){ if(!this.on) return; clearTimeout(this._t); this._t=setTimeout(()=>this.push(), 300); },
-   // 全自动同步：每 5 秒静默拉取；后台标签页与编辑弹窗打开时暂停；切回页面立即拉取
-   startAuto(){
-     if(this._auto) return;
-     this._auto=setInterval(()=>{ if(!this.on||this._busy||document.hidden||document.querySelector(".overlay")) return; this.pull(true); }, 5000);
-     document.addEventListener("visibilitychange",()=>{ if(!document.hidden && this.on && !document.querySelector(".overlay")) this.pull(true); });
+   schedulePush(){ if(!this.on) return; clearTimeout(this._t); this._t=setTimeout(()=>this.push(), 300); },
+   // v3.3 修复①：pending push 队列——任何一次 push 失败（网络断/超时/DNS 污染等）都标记待补发，
+   // 由网络恢复、页面回前台、自动轮询三路触发补发，保证"最后一次成功 push 之后的本地改动"必然上云，
+   // 彻底消除"手机在弱网下改动后，该 push 永远丢失、PC 永远收不到"的单向上行故障。
+   _pendingPush:false,
+   markPending(){ this._pendingPush=true; },
+   clearPending(){ this._pendingPush=false; },
+   tryFlush(){ if(this._pendingPush && this.on && !this._busy) this.push(); },
+    // 全自动同步：每 5 秒静默拉取；后台标签页与编辑弹窗打开时暂停；切回页面立即拉取
+    startAuto(){
+      if(this._auto) return;
+      this._auto=setInterval(()=>{ if(!this.on||this._busy||document.hidden||document.querySelector(".overlay")) return; if(this._pendingPush) this.push(); else this.pull(true); }, 5000);
+      document.addEventListener("visibilitychange",()=>{ if(document.hidden) return; if(!this.on || document.querySelector(".overlay")) return; if(this._pendingPush) this.push(); else this.pull(true); });
+      window.addEventListener("online",()=>{ if(this.on) this.tryFlush(); });   // 网络恢复立即补发
+    },
+   async push(){
+     if(!this.on || this._busy) { if(!this.on && this._pendingPush) this.markPending(); return; } this._busy=true; this.badge("同步中…");
+     try {
+       const token=this.cfg().token;
+       let body;
+       if(token && crypto && crypto.subtle){
+         const enc = await wbCrypto.encrypt(data, token);
+         body = JSON.stringify({ data: enc, enc:"v1" });
+       } else {
+         body = JSON.stringify({ data });
+       }
+       const res = await fetch(this._url("/data"), { method:"PUT", headers:{"Content-Type":"application/json"}, body });
+       if(!res.ok) throw new Error("HTTP "+res.status);
+       const r = await res.json().catch(()=>({}));
+       if(r.rev!=null) this.set("rev", r.rev);
+       if(r.updatedAt) this.set("updatedAt", r.updatedAt);
+       this.set("lastSync", Date.now()); this._saveBase(data); this.clearPending(); this.badge("已同步");
+     } catch(e){ this.markPending(); this.badge("同步失败"); console.warn("[sync] push 失败，已标记待补发:", e); }
+     finally { this._busy=false; }
    },
-  async push(){
-    if(!this.on || this._busy) return; this._busy=true; this.badge("同步中…");
-    try {
-      const token=this.cfg().token;
-      let body;
-      if(token && crypto && crypto.subtle){
-        const enc = await wbCrypto.encrypt(data, token);
-        body = JSON.stringify({ data: enc, enc:"v1" });
-      } else {
-        body = JSON.stringify({ data });
-      }
-      const res = await fetch(this._url("/data"), { method:"PUT", headers:{"Content-Type":"application/json"}, body });
-      if(!res.ok) throw new Error("HTTP "+res.status);
-      const r = await res.json().catch(()=>({}));
-      if(r.rev!=null) this.set("rev", r.rev);
-      if(r.updatedAt) this.set("updatedAt", r.updatedAt);
-      this.set("lastSync", Date.now()); this._saveBase(data); this.badge("已同步");
-    } catch(e){ this.badge("同步失败"); console.warn("[sync] push:", e); }
-    finally { this._busy=false; }
-  },
   async pull(silent){
     if(!this.on) return;
     try {
@@ -1308,8 +1318,8 @@ const sync = {
       const r = await res.json().catch(()=>({}));
       const localRev = this.cfg().rev||0;
       if(!this._base()) this._saveBase(data);
-      if(r && r.data==null) this._emptyCloud=true;   // v3.2: 仅当云端确实无数据时才允许初始 push，防止新设备 pull 失败后把种子数据覆盖云端
-      if(r && r.data!=null && (r.rev||0) > localRev){
+       if(r && r.data==null) this._emptyCloud=true;   // v3.2: 仅当云端确实无数据时才允许初始 push，防止新设备 pull 失败后把种子数据覆盖云端
+       if(r && r.data!=null && (r.rev||0) > localRev){
         /* 处理加密态：{ ct, iv, exp, rev, enc } → 解密后取 data */
         let _remote=r.data;
         if(_remote && typeof _remote==="object" && _remote.ct && _remote.iv){
@@ -1322,43 +1332,50 @@ const sync = {
         if(JSON.stringify(data)!==JSON.stringify(_remote)){ this.schedulePush(); if(!silent) toast("已合并本地与云端数据"); this.badge("已同步"); }
         else { if(!silent) toast("已从云端拉取最新数据"); this.badge("已同步"); }
       } else if(!silent){ toast("本地已是最新"); }
-    } catch(e){
-      if(e && e.message && e.message.indexOf("Operation error")>=0){
-        if(!silent) toast("密码（token）不正确，无法解密云端数据"); this.badge("解密失败");
-      } else {
-        if(!silent) toast("拉取失败："+e.message); this.badge("同步失败");
-      }
-      console.warn("[sync] pull:", e);
-    }
+     } catch(e){
+       if(e && e.message && e.message.indexOf("Operation error")>=0){
+         if(!silent) toast("密码（token）不正确，无法解密云端数据"); this.badge("解密失败");
+       } else {
+         this.markPending();   // v3.3 修复②：pull 网络失败 → 本地改动标记待补发（网络恢复后自动上云）
+         if(!silent) toast("拉取失败："+e.message); this.badge("同步失败");
+       }
+       console.warn("[sync] pull:", e);
+     }
   },
   _baseKey(){ return SYNC_KEY+"::base"; },
   _saveBase(d){ try{ storage.setItem(this._baseKey(), JSON.stringify(d)); }catch(e){} },
   _base(){ try{ const s=storage.getItem(this._baseKey()); return s?JSON.parse(s):null; }catch(e){ return null; } },
-  _mergeKey(L,R,B){
-    if(Array.isArray(L)&&Array.isArray(R)){
-      if(L.some(i=>!i||i.id==null)||R.some(i=>!i||i.id==null)) return L;
-      const Bm={};(B||[]).forEach(i=>{ if(i&&i.id!=null) Bm[i.id]=i; });
-      const Lm={},order=[]; L.forEach(i=>{ Lm[i.id]=i; order.push(i.id); });
-      const Rm={}; R.forEach(i=>{ Rm[i.id]=i; });
-      const ids=order.slice(); Object.keys(Rm).forEach(id=>{ if(!(id in Lm)) ids.push(id); });
-      const out=[];
-      ids.forEach(id=>{ const b=Bm[id],l=Lm[id],r=Rm[id];
-        if(l&&r){ const lc=!b||JSON.stringify(l)!==JSON.stringify(b); const rc=!b||JSON.stringify(r)!==JSON.stringify(b); out.push(rc&&!lc?r:l); }
-        else if(l) out.push(l); else if(r) out.push(r); });
-      return out;
-    }
-    return R;
-  },
-  mergeData(remote){
-    const base=this._base(); if(!base) return remote;
-    try{
-      const merged={}; const keys=new Set([...Object.keys(remote),...Object.keys(data)]);
-      keys.forEach(k=>{ const L=data[k],R=remote[k],B=base[k];
-        const lc=JSON.stringify(L)!==JSON.stringify(B), rc=JSON.stringify(R)!==JSON.stringify(B);
-        if(!rc) merged[k]=L; else if(!lc) merged[k]=R; else merged[k]=this._mergeKey(L,R,B); });
-      console.info("[sync] 字段级合并完成"); return merged;
-    }catch(e){ console.warn("[sync] 合并失败, 回退整替:", e); return remote; }
-  },
+   _mergeKey(L,R,B,dead){
+     if(Array.isArray(L)&&Array.isArray(R)){
+       if(L.some(i=>!i||i.id==null)||R.some(i=>!i||i.id==null)) return L;
+       const Bm={};(B||[]).forEach(i=>{ if(i&&i.id!=null) Bm[i.id]=i; });
+       const Lm={},order=[]; L.forEach(i=>{ Lm[i.id]=i; order.push(i.id); });
+       const Rm={}; R.forEach(i=>{ Rm[i.id]=i; });
+       const ids=order.slice(); Object.keys(Rm).forEach(id=>{ if(!(id in Lm)) ids.push(id); });
+       const out=[];
+       ids.forEach(id=>{ if(dead&&dead.has(String(id))) return;   // v3.3: 墓碑跳过——与 PC 端对齐，删除可跨端传播，不再被"远端新增"复活
+         const b=Bm[id],l=Lm[id],r=Rm[id];
+         if(l&&r){ const lc=!b||JSON.stringify(l)!==JSON.stringify(b); const rc=!b||JSON.stringify(r)!==JSON.stringify(b); out.push(rc&&!lc?r:l); }
+         else if(l) out.push(l); else if(r) out.push(r); });
+       return out;
+     }
+     return R;
+   },
+   mergeData(remote){
+     const base=this._base(); if(!base){ remote.__remindState=data.__remindState||{fired:{},queue:[]}; return remote; }
+     try{
+       const merged={}; const keys=new Set([...Object.keys(remote),...Object.keys(data)]);
+       keys.delete("__remindState");   // v3.3: 与 PC 端对齐——运行时状态不参与合并
+       const deadByMod={};   // v3.3: 墓碑索引——与 PC 端对齐，删除操作跨端传播
+       [data.__trash, remote.__trash, base.__trash].forEach(t=>{ (t||[]).forEach(i=>{ if(i&&i.id!=null&&i.__module){ (deadByMod[i.__module]=deadByMod[i.__module]||new Set()).add(String(i.id)); } }); });
+       [data.__tombstones, remote.__tombstones, base.__tombstones].forEach(t=>{ (t||[]).forEach(i=>{ if(i&&i.id&&String(i.id).indexOf("::")>0){ const p=String(i.id).split("::"); (deadByMod[p[0]]=deadByMod[p[0]]||new Set()).add(p.slice(1).join("::")); } }); });
+       keys.forEach(k=>{ const L=data[k],R=remote[k],B=base[k];
+         const lc=JSON.stringify(L)!==JSON.stringify(B), rc=JSON.stringify(R)!==JSON.stringify(B);
+         if(!rc) merged[k]=L; else if(!lc) merged[k]=R; else merged[k]=this._mergeKey(L,R,B,deadByMod[k]); });
+       merged.__remindState=data.__remindState||{fired:{},queue:[]};   // v3.3: 内部状态始终以本地为准
+       console.info("[sync] 字段级合并完成"); return merged;
+     }catch(e){ console.warn("[sync] 合并失败, 回退整替:", e); remote.__remindState=data.__remindState||{fired:{},queue:[]}; return remote; }
+   },
   async now(){ await this.pull(false); await this.push(); },
   fmtLast(){ const t=this.cfg().lastSync; if(!t) return "—"; try { return new Date(t).toLocaleString("zh-CN",{hour12:false}); } catch(e){ return "—"; } },
   badge(text){ const el=document.getElementById("syncBadge"); if(el) el.textContent=text; },
@@ -1414,6 +1431,82 @@ function nextHoliday(){ const n=new Date(); for(let i=0;i<400;i++){ const d=new 
 const QUICK_OPTS=[{m:5,l:"5 分钟"},{m:10,l:"10 分钟"},{m:15,l:"15 分钟"},{m:30,l:"30 分钟"},{m:45,l:"45 分钟"},{m:60,l:"1 小时"},{m:120,l:"2 小时"}];
 const QUICK_LABEL={0:"不反复",5:"每 5 分钟",10:"每 10 分钟",15:"每 15 分钟",30:"每 30 分钟",45:"每 45 分钟",60:"每 1 小时",120:"每 2 小时"};
 function pomoToday(){ const P=data.__pomo; if(!P.today||P.today.date!==isoToday()) P.today={date:isoToday(),count:0,min:0}; return P.today; }
+
+/* ============================================================
+   v1.21.0 计划管理：每日任务调度（状态自动判定）+ 状态机 + 补偿机制
+   与 PC 端 workbench.html 保持完全一致（同一份调度逻辑双端各跑一次，
+   幂等由 __planReview.last_run_day 保证，双端各写各的 localStorage，
+   通过三方合并同步到云端；last_run_day 相同则互为 no-op）
+   ============================================================ */
+const PLAN_STATUS = {
+  not_started:{ label:"未开始", icon:"○", color:"var(--text-tertiary)" },
+  in_progress:  { label:"进行中", icon:"◔", color:"var(--accent)" },
+  delayed:      { label:"延期",   icon:"⏰", color:"var(--danger,#b3403a)" },
+  cancelled:    { label:"取消",   icon:"✕", color:"var(--text-tertiary)" },
+  terminated:   { label:"终止",   icon:"■", color:"var(--danger,#b3403a)" },
+  done:         { label:"完成",   icon:"✓", color:"var(--module-1,#2e9e5b)" },
+};
+const PLAN_TRANSITIONS = {
+  not_started:["in_progress","cancelled","terminated","done"],
+  in_progress:["done","delayed","cancelled","terminated"],
+  delayed:["in_progress","cancelled","terminated","done"],
+  done:[],   // 终态：系统自动判定后不可再转；如需恢复，须手动删除 status 字段或新建条目
+  cancelled:[],
+  terminated:[],
+};
+function planStatusOf(x){
+  if(!x) return "not_started";
+  if(x.status && PLAN_STATUS[x.status]) return x.status;
+  if(x.done===true || x.status==="done") return "done";
+  const cur=+x.current||0, tgt=+x.target||0;
+  if(tgt>0 && cur>=tgt) return "done";
+  const _due=x.expected_finish_time?new Date(x.expected_finish_time.replace(" ","T")):null; if(_due && _due < new Date(isoToday()+"T00:00:00")) return "delayed";
+  return cur>0 ? "in_progress" : "not_started";
+}
+function canPlanTransition(from,to){ return (PLAN_TRANSITIONS[from]||[]).includes(to); }
+function planDailyScan(trigger){
+  const log=[];
+  const scopeKeys=["read","todo"];   // 计划类模块：长期目标(progress) + 今日计划(todo)
+  let changed=0;
+  scopeKeys.forEach(k=>{
+    const arr=data[k]; if(!Array.isArray(arr)) return;
+    arr.forEach(x=>{
+      if(!x||typeof x!=="object") return;
+      const st=planStatusOf(x);
+      const hasDue = !!(x.expected_finish_time || x.deadline);
+      if(!hasDue) { if(x.status && st!=="done" && x.status!==st) x.status=st; return; }
+      const due = x.expected_finish_time ? new Date(x.expected_finish_time.replace(" ","T")) : new Date(x.deadline+"T00:00:00");
+      const today0 = new Date(isoToday()+"T00:00:00");
+      const completed = x.done===true || st==="done" || ((+x.current||0)>=((+x.target)||0) && (+x.target||0)>0);
+      if(due < today0){
+        if(completed){
+          if(st!=="done"){ x.status="done"; x.done=true; log.push(k+"::"+x.id+" 到期且已完成 → 完成"); changed++; }
+        } else {
+          if(st!=="delayed"){ x.status="delayed"; log.push(k+"::"+x.id+" 到期未完成 → 延期"); changed++; }
+        }
+      } else {
+        if(st==="delayed" && !completed){ x.status=( +x.current>0 ? "in_progress" : "not_started" ); log.push(k+"::"+x.id+" 未到期，延期状态回正"); changed++; }
+      }
+      x.last_review_at = isoNowLocal();
+    });
+  });
+  if(!data.__planReview || typeof data.__planReview!=="object") data.__planReview={};
+  data.__planReview.last_run_day = isoToday();
+  data.__planReview.last_result = trigger;
+  data.__planReview.last_log = log.slice(0,50);
+  data.__planReview.last_changed = changed;
+  return changed;
+}
+function planSchedulerTick(){
+  const hour=new Date().getHours();
+  const day=isoToday();
+  const rv=data.__planReview||{};
+  if(rv.last_run_day===day) return;   // 今天已成功执行过（主或补偿）→ 幂等跳过
+  if(hour>=0 && hour<8){ planDailyScan("main-00:00"); store.save(); return; }
+  if(hour>=8){ planDailyScan("comp-08:00"); store.save(); return; }
+}
+setInterval(planSchedulerTick, 5*60*1000);   // 每 5 分钟检查一次
+
 function _focusDef(){ let f=25, b=5; try { f=(data.focus&&data.focus.focusMin)||25; b=(data.focus&&data.focus.breakMin)||5; } catch(e){ /* data 处于 TDZ 时回退默认值 */ } return {f,b}; }
 const _FD=_focusDef();
 let pomo = { mode:"focus", running:false, remain:_FD.f*60, total:_FD.f*60 };   // 番茄钟状态（内存态，跨渲染保留）
@@ -1547,6 +1640,12 @@ function remTickMobile(){
 
 function ensureV2M(d){
   CONFIG.modules.forEach(m=>{ if(!Array.isArray(d[m.key])) d[m.key]=[]; });
+  if(!d.__trash) d.__trash=[];
+  if(!d.__tombstones) d.__tombstones=[];
+  if(!d.__planReview||typeof d.__planReview!=="object"||Array.isArray(d.__planReview)) d.__planReview={};   // v1.21.0: 计划调度日志（last_run_day 幂等键）
+  if(!d.__trash) d.__trash=[];
+  if(!d.__tombstones) d.__tombstones=[];
+  if(!d.__planReview||typeof d.__planReview!=="object"||Array.isArray(d.__planReview)) d.__planReview={};   // v1.21.0: 计划调度日志（last_run_day 幂等键）
   if(!d.focus||typeof d.focus!=="object"||Array.isArray(d.focus)) d.focus={focusMin:25,breakMin:5,goal:8};
   if(!d.profile||typeof d.profile!=="object"||Array.isArray(d.profile)) d.profile={nickname:"",gender:"",birthday:"",phone:"",email:"",wechat:"",city:"",job:"",motto:""};
   if(!d.__pomo||typeof d.__pomo!=="object"){ const P=(d.__pomo&&d.__pomo.total)?d.__pomo:null; d.__pomo=P||{total:{count:0,min:0},today:{date:"",count:0,min:0}}; }
@@ -1966,7 +2065,7 @@ function focusStatsHM(){
     <div style="font-size:12px;color:var(--text-secondary);margin:12px 0 6px">每日目标</div>
     <div style="display:flex;gap:8px;flex-wrap:wrap">
       ${[4,6,8,12].map(v=>`<button class="js-focus-set js-fs-goal ${data.focus.goal===v?'':'dimg'}" data-v="${v}" style="${data.focus.goal===v?"background:var(--accent);color:var(--on-accent);border-color:var(--accent)":""}padding:6px 12px;font-size:12px;font-weight:700;border:1px solid var(--border-input);border-radius:8px;background:var(--surface-card);color:var(--text-secondary);cursor:pointer">${v} 个</button>`).join("")}</div>
-    <div style="font-size:11px;color:var(--text-tertiary);margin-top:12px;line-height:1.6">完成一个专注后自动进入休息倒计时，休息结束自动切回专注，页面开着就会连续作战��响铃提醒。</div>
+    <div style="font-size:11px;color:var(--text-tertiary);margin-top:12px;line-height:1.6">完成一个专注后自动进入休息倒计时，休息结束自动切回专注，页面开着就会连续作战，响铃提醒。</div>
   </div>`;
 }
 function focusUI(){
@@ -2177,7 +2276,7 @@ function openRemindEditorM(id){
       <option value="0" ${it.ahead==0?"selected":""}>仅当天</option><option value="1" ${it.ahead==1?"selected":""}>提前 1 天</option>
       <option value="3" ${it.ahead==3?"selected":""}>提前 3 天</option><option value="7" ${it.ahead==7?"selected":""}>提前 7 天</option></select></div>
     <div class="field rm-f-tz" ${it.type==="quick"?"style='display:none'":""}><label>时区</label><select id="rm-tz" style="width:100%">
-      <option value="auto">自动���本地时区）</option>${it.tz&&it.tz!=="auto"?"<option selected>"+it.tz+"</option>":""}
+      <option value="auto">自动（本地时区）</option>${it.tz&&it.tz!=="auto"?"<option selected>"+it.tz+"</option>":""}
       ${["GMT+0","GMT+8","GMT-5","GMT-8"].filter(z=>z!==it.tz&&it.tz).map(z=>"<option>"+z+"</option>").join("")}</select></div>
     <div class="field rm-f-min" ${it.type!=="quick"?"style='display:none'":""}><label>多少分钟后</label><select id="rm-min" style="width:100%">${QUICK_OPTS.map(o=>'<option value="'+o.m+'" '+(it.m===o.m?"selected":"")+">"+o.l+"</option>").join("")}</select></div>
     <div class="field rm-f-quick" ${it.type==="quick"?"style='display:none'":""}><label>到点后反复</label><select id="rm-quick" style="width:100%">${optQuick}</select></div>
@@ -2357,11 +2456,15 @@ function recHTML(m,x){
   // default layout (原有逻辑)
   if(m.type==="todo"){
     const p=(m.priorities||[]).find(p=>p.key===x.priority);
+    // v1.21.0 计划管理：待办条目状态徽章（延期/完成）+ 预计完成时间
+    const _tst=planStatusOf(x);
+    const _tstBadge=(_tst==="delayed"||_tst==="done")?`<span class="badge" style="background:${_tst==='done'?'var(--module-1)':'var(--surface-nested)'};color:${_tst==='done'?'#fff':'var(--danger,#b3403a)'}">${PLAN_STATUS[_tst].icon} ${PLAN_STATUS[_tst].label}</span>`:'';
+    const _texpBadge=x.expected_finish_time?`<span class="badge" style="background:var(--surface-nested);color:var(--text-secondary)">🎯 ${esc(x.expected_finish_time)}</span>`:'';
     return `<div class="rec ${layoutCls}">${acts}<div class="top">
       <div class="chk js-chk ${x.done?'on':''}" data-id="${x.id}">${chkMark}</div>
       ${thumb}
       <div class="body" data-edit="${x.id}"><div class="rname ${x.done?'done':''}">${esc(x.title)}</div>
-      <div class="rmeta">${p?`<span class="badge" style="background:${p.color};color:${p.text}"><span class="dot"></span>${p.label}</span>`:''}</div>
+      <div class="rmeta">${p?`<span class="badge" style="background:${p.color};color:${p.text}"><span class="dot"></span>${p.label}</span>`:''}${_tstBadge||_texpBadge?` ${_tstBadge}${_texpBadge}`:''}</div>
       ${x.note?`<div class="rnote">${esc(x.note)}</div>`:''}${customBlock}</div></div></div>`;
   }
   if(m.type==="checkin"){
@@ -2374,11 +2477,18 @@ function recHTML(m,x){
   }
   if(m.type==="progress"){
     const pct=Math.min(100,Math.round((x.current/x.target)*100||0));
+    // v1.21.0 计划管理：状态图标+文字、预计完成时间、创建时间
+    const _pst=planStatusOf(x);
+    const _ps=PLAN_STATUS[_pst]||PLAN_STATUS.not_started;
+    const _stBadge=`<span class="badge" style="background:${_pst==='done'?'var(--module-1)':'var(--surface-nested)'};color:${_ps.color||'var(--text-secondary)'};font-weight:600">${_ps.icon} ${_ps.label}</span>`;
+    const _expInfo=x.expected_finish_time?`<span class="badge" style="background:var(--surface-nested);color:var(--text-secondary)">🎯 ${esc(x.expected_finish_time)}</span>`:'';
+    const _createdNote=x.created_at?`<div style="margin-top:4px;font-size:10.5px;color:var(--text-tertiary)">创建于 ${esc(x.created_at)}${x.last_review_at?` · 最近核对 ${esc(x.last_review_at)}`:''}</div>`:'';
     return `<div class="rec ${layoutCls}">${acts}<div class="top">${thumb}<div class="body" data-edit="${x.id}">
       <div class="rname">${esc(x.title)}</div>
       <div class="rmeta"><span style="color:var(--text-secondary);font-size:13px">${x.current}/${x.target} ${x.unit||m.unit||''} · ${pct}%</span></div>
+      <div class="rmeta" style="margin-top:4px">${_stBadge}${_expInfo}</div>
       <div class="pbar"><i style="width:${pct}%;background:${m.color}"></i></div>
-      ${x.note?`<div class="rnote">${esc(x.note)}</div>`:''}${customBlock}</div></div></div>`;
+      ${x.note?`<div class="rnote">${esc(x.note)}</div>`:''}${_createdNote}${customBlock}</div></div></div>`;
   }
   if(m.type==="finance"){
     const inc=x.type==="income";
@@ -2427,7 +2537,8 @@ function openEditor(key, item){
   if(m.type==="todo"){
     fields=`<div class="field"><label>任务</label><input id="f-title" value="${attr(d.title)}" placeholder="要做什么？"/></div>
       <div class="field"><label>优先级</label><div class="seg" id="f-prio">${(m.priorities||[]).map(p=>`<div class="opt ${p.key===d.priority?'on':''}" data-v="${p.key}">${p.label}</div>`).join("")}</div></div>
-      <div class="field"><label>备注</label><textarea id="f-note" placeholder="补充说明">${esc(d.note||'')}</textarea></div>`;
+      <div class="field"><label>备注</label><textarea id="f-note" placeholder="补充说明">${esc(d.note||'')}</textarea></div>
+      <div class="field"><label>预计完成时间（可选）</label><input id="f-texp" type="datetime-local" value="${d.expected_finish_time ? d.expected_finish_time.slice(0,10)+'T00:00' : ''}"/></div>`;
   } else if(m.type==="checkin"){
     fields=`<div class="field"><label>打卡项</label><input id="f-title" value="${attr(d.title)}" placeholder="例如：喝够 8 杯水"/></div>
       <p class="sub" style="margin:0">保存后可在列表点击左侧方块打卡；连续天数自动统计，每天从零开始。</p>`;
@@ -2436,6 +2547,8 @@ function openEditor(key, item){
       <div class="frow"><div class="field"><label>当前</label><input id="f-cur" type="number" value="${d.current??0}"/></div>
       <div class="field"><label>目标</label><input id="f-tgt" type="number" value="${d.target??1}"/></div>
       <div class="field"><label>单位</label><input id="f-unit" value="${attr(d.unit||m.unit||'')}"/></div></div>
+      <div class="field"><label>预计完成时间（可选）</label><input id="f-exp" type="datetime-local" value="${d.expected_finish_time ? d.expected_finish_time.slice(0,10)+'T00:00' : ''}"/></div>
+      <div class="field"><label>状态</label><div class="seg" id="f-planst">${Object.entries(PLAN_STATUS).filter(([k])=>k!=="delayed").map(([k,v])=>`<div class="opt ${planStatusOf(d)===k?'on':''}" data-v="${k}">${v.icon} ${v.label}</div>`).join("")}</div></div>
       <div class="field"><label>摘录 / 想法</label><textarea id="f-note" placeholder="随手记">${esc(d.note||'')}</textarea></div>`;
   } else if(m.type==="finance"){
     fields=`<div class="field"><label>类型</label><div class="seg" id="f-ftype">
@@ -2498,10 +2611,41 @@ function openEditor(key, item){
     const seg=id=>{ const el=overlay.querySelector(id+" .on"); return el?el.dataset.v:undefined; };
     d.title=(val("#f-title")||"").trim()||"未命名";
     d.layout=seg("#f-layout")||'default';
-    if(m.type==="todo"){ d.priority=seg("#f-prio")||d.priority; d.note=(val("#f-note")||"").trim(); }
-    else if(m.type==="progress"){ d.current=Math.max(0,+val("#f-cur")||0); d.target=Math.max(1,+val("#f-tgt")||1); d.unit=(val("#f-unit")||"").trim(); d.note=(val("#f-note")||"").trim(); }
+    if(m.type==="todo"){
+      d.priority=seg("#f-prio")||d.priority; d.note=(val("#f-note")||"").trim();
+      // v1.21.0 计划管理：今日计划也支持 expected_finish_time
+      const tv=val("#f-texp"); if(tv) d.expected_finish_time=tv.replace("T"," "); else delete d.expected_finish_time;
+    }
+    else if(m.type==="progress"){
+      d.current=Math.max(0,+val("#f-cur")||0); d.target=Math.max(1,+val("#f-tgt")||1); d.unit=(val("#f-unit")||"").trim(); d.note=(val("#f-note")||"").trim();
+      // v1.21.0 计划管理：expected_finish_time（datetime-local → 本地 "yyyy-mm-dd HH:mm"）
+      const ev=val("#f-exp"); if(ev) d.expected_finish_time = ev.replace("T"," "); else delete d.expected_finish_time;
+      const pv=seg("#f-planst");
+      if(pv){
+        const cur=planStatusOf(d);
+        if(pv!==cur){
+          d.status=pv;
+          if(pv==="done"){ d.done=true; d.current=Math.max(+d.current||0, +d.target||0); }
+          else if(pv==="cancelled"||pv==="terminated"){ d.done=false; }
+        }
+      }
+    }
     else if(m.type==="finance"){ d.type=seg("#f-ftype")||"expense"; d.amount=Math.max(0,+val("#f-amt")||0); d.category=seg("#f-cat")||(m.categories&&m.categories[0])||"其他"; d.date=val("#f-date"); d.recur=seg("#f-recur")||""; if(d.recur){ d.nextDue=recurNext(d.date||isoToday(),d.recur); } else { delete d.nextDue; } }
     else if(m.type==="note"){ d.mood=seg("#f-mood")||d.mood||""; d.content=(val("#f-content")||"").trim(); d.date=val("#f-date"); }
+    // v1.21.0 计划管理：created_at 新建时间（系统写入，界面不展示，仅列表展示）
+    if(!editing && !d.created_at) d.created_at = isoNowLocal();
+    // v1.21.0 计划状态机：新建/编辑保存时补 status 与调度日志时间戳
+    if(m.type==="progress" || m.type==="todo"){
+      if(!d.status) d.status = "not_started";
+      if(d.status && d.status!=="done") d.last_review_at = isoNowLocal();
+    }
+    // v1.21.0 计划管理：created_at 新建时间（系统写入，界面不展示，仅列表展示）
+    if(!editing && !d.created_at) d.created_at = isoNowLocal();
+    // v1.21.0 计划状态机：新建/编辑保存时补 status 与调度日志时间戳
+    if(m.type==="progress" || m.type==="todo"){
+      if(!d.status) d.status = "not_started";
+      if(d.status && d.status!=="done") d.last_review_at = isoNowLocal();
+    }
     // save custom fields
     (m.fields||[]).forEach(f=>{
       if(f.type==="select") d[f.key]=seg("#f-cf-"+f.key)||d[f.key]||"";
@@ -3020,7 +3164,7 @@ function attr(s){ return esc(s).replace(/"/g,'&quot;'); }
 buildDrawer();
 render();
 sync.badge(sync.on ? "自动同步中" : "未启用同步");
-sync.startAuto(); if(sync.on) sync.pull(true).then(()=>{ if((sync.cfg().rev||0)===0 && sync._emptyCloud && data && Object.keys(data).length) sync.push(); });
+sync.startAuto(); if(sync.on) sync.pull(true).then(function(){ if((sync.cfg().rev||0)===0 && sync._emptyCloud && data && Object.keys(data).length) sync.push(); }).catch(function(_e){ console.warn("[sync] 启动拉取失败：", _e); sync.markPending(); });
 (function(){ try{ var _cut=(function(){var _d=new Date();_d.setDate(_d.getDate()-30);return fmtLocal(_d);})(); if((data.__trash||[]).length){ var _before=data.__trash.length; data.__trash=data.__trash.filter(function(t){ return !t.__deletedAt || t.__deletedAt>=_cut; }); if(data.__trash.length!==_before) store.saveLocal(); } var _has=CONFIG.modules.some(function(m){ return Array.isArray(data[m.key]) && data[m.key].length>0; }); var _last=data.__lastExport||""; if(_has && (!_last || _last<=daysAgo(7))){ setTimeout(function(){ toast("距上次导出备份已超过 7 天，建议导出以防数据丢失", { label:"立即导出", fn:function(){ exportData(); } }); }, 3000); } }catch(e){} })();
 (function(){ try{ initRecurBills(); }catch(e){} })();
 
